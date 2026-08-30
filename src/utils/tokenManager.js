@@ -83,7 +83,7 @@ const setTokenCookies = (res, accessToken, refreshToken) => {
     httpOnly: true,
     secure: isProduction,
     sameSite: isProduction ? "strict" : "lax",
-    path: "/api/users", // Scoped only to user auth routes
+    path: "/", // Accessible across all API endpoints
     maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
   });
 };
@@ -98,12 +98,13 @@ const clearTokenCookies = (res) => {
     httpOnly: true,
     secure: isProduction,
     sameSite: isProduction ? "strict" : "lax",
+    path: "/",
   });
   res.clearCookie("refreshToken", {
     httpOnly: true,
     secure: isProduction,
     sameSite: isProduction ? "strict" : "lax",
-    path: "/api/users",
+    path: "/",
   });
 };
 
