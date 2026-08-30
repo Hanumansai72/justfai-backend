@@ -7,9 +7,11 @@ const User = require("../models/User");
 
 const seedAdmin = async () => {
   try {
-    const adminEmail    = process.env.ADMIN_DEFAULT_EMAIL || "admin@justride.com";
+    const adminEmail    = process.env.ADMIN_DEFAULT_EMAIL || "admin@justride.io";
     const adminUsername = process.env.ADMIN_DEFAULT_USERNAME || "admin";
-    const adminPassword = process.env.ADMIN_DEFAULT_PASSWORD || "admin";
+    const adminPassword = (process.env.ADMIN_DEFAULT_PASSWORD && process.env.ADMIN_DEFAULT_PASSWORD.length >= 6)
+      ? process.env.ADMIN_DEFAULT_PASSWORD
+      : "AdminPassword123!";
 
     // Check if an admin account already exists
     const existingAdmin = await User.findOne({
@@ -17,7 +19,7 @@ const seedAdmin = async () => {
     });
 
     if (!existingAdmin) {
-      const admin = await User.create({
+      await User.create({
         name: "Super Administrator",
         username: adminUsername,
         email: adminEmail,
@@ -26,9 +28,8 @@ const seedAdmin = async () => {
         status: "active",
       });
 
-      console.log(`[Seed] Default Admin account created: username="${adminUsername}", email="${adminEmail}" 🛡️`);
+      console.log(`[Seed] Default Admin account created: username="${adminUsername}", email="${adminEmail}" (pwd: ${adminPassword}) 🛡️`);
     } else {
-      // Ensure existing admin has the username field set if it was previously null
       if (!existingAdmin.username) {
         existingAdmin.username = adminUsername;
         await existingAdmin.save({ validateBeforeSave: false });

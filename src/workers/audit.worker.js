@@ -11,7 +11,7 @@ const QUEUE_NAME = "audit-log-queue";
 let auditWorker = null;
 
 const startAuditWorker = () => {
-  if (process.env.ENABLE_REDIS === "false") return null;
+  if (process.env.ENABLE_REDIS !== "true") return null;
 
   try {
     auditWorker = new Worker(

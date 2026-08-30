@@ -16,7 +16,7 @@ const QUEUE_NAME = "notification-queue";
 let notificationWorker = null;
 
 const startNotificationWorker = () => {
-  if (process.env.ENABLE_REDIS === "false") return null;
+  if (process.env.ENABLE_REDIS !== "true") return null;
 
   try {
     notificationWorker = new Worker(
