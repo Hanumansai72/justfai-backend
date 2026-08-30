@@ -103,6 +103,7 @@ const {
 const {
   getAuditLogs,
   getAuditStats,
+  getAuditLogById,
   getUserActivityLogs,
 } = require("../controllers/admin/audit.controller");
 
@@ -125,5 +126,6 @@ router.patch("/notifications/mark-all-read",        authorize("ADMIN", "HELPER")
 // Audit Logs & System Activity (For ADMIN & HELPER)
 router.get("/audit-logs",                            authorize("ADMIN", "HELPER"), getAuditLogs);
 router.get("/audit-logs/stats",                      authorize("ADMIN", "HELPER"), getAuditStats);
+router.get("/audit-logs/:id",                        authorize("ADMIN", "HELPER"), getAuditLogById);
 
 module.exports = router;

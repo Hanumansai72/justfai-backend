@@ -42,6 +42,8 @@ exports.registerDevice = async (req, res, next) => {
       });
     }
 
+    const uniqueDeviceSecret = generateRandomCode(32).toLowerCase();
+
     const device = await Device.create({
       devicename:       devicename || "Smart Ride Device",
       device_version,
@@ -49,6 +51,7 @@ exports.registerDevice = async (req, res, next) => {
       serialnumber,
       BLE_ADDRESS:      normalizedBle,
       device_id:        device_id || `DEV-${generateRandomCode(8)}`,
+      device_secret:    uniqueDeviceSecret,
       is_paired:        false,
       is_active:        true,
     });

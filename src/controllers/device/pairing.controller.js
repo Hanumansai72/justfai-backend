@@ -135,7 +135,7 @@ exports.pairDevice = async (req, res, next) => {
      * Saves one full DB round-trip compared to sequential awaits.
      */
     const [device, userCurrentDevice] = await Promise.all([
-      Device.findOne({ $or: orConditions }),
+      Device.findOne({ $or: orConditions }).select("+device_secret"),
       Device.findOne({ linked_to: req.user._id, is_paired: true }).select("_id devicename BLE_ADDRESS device_id").lean(),
     ]);
 
@@ -167,9 +167,10 @@ exports.pairDevice = async (req, res, next) => {
       });
     }
 
-    // Generate cryptographic credentials
+    // Generate cryptographic credentials using the device's unique secret
     const pairingCode = generateRandomCode(6);
-    const deviceHash  = generateDeviceHash(normalizedBle, pairingCode);
+    const deviceSecret = device.device_secret || process.env.DEVICE_SECRET;
+    const deviceHash  = generateDeviceHash(normalizedBle, pairingCode, deviceSecret);
 
     /**
      * Concurrency / Race Condition Defense:

@@ -9,6 +9,19 @@
  *   - Health check ping
  */
 const Redis = require("ioredis");
+const { Redis: UpstashRedis } = require("@upstash/redis");
+
+let upstashRedis = null;
+if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
+  try {
+    upstashRedis = new UpstashRedis({
+      url: process.env.UPSTASH_REDIS_REST_URL,
+      token: process.env.UPSTASH_REDIS_REST_TOKEN,
+    });
+  } catch (err) {
+    console.warn("[Upstash Redis] REST client initialization failed:", err.message);
+  }
+}
 
 const redisConfig = {
   host: process.env.REDIS_HOST || "127.0.0.1",
@@ -33,7 +46,7 @@ const redisConfig = {
 let redisClient = null;
 let isConnected = false;
 
-if (process.env.ENABLE_REDIS !== "false") {
+if (process.env.ENABLE_REDIS === "true") {
   try {
     redisClient = new Redis(redisConfig);
 
@@ -79,6 +92,7 @@ const pingRedis = async () => {
 
 module.exports = {
   redisClient,
+  upstashRedis,
   redisConfig,
   isRedisConnected: () => isConnected,
   pingRedis,

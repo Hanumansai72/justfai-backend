@@ -130,6 +130,69 @@ exports.getAuditLogs = async (req, res, next) => {
 };
 
 // ─────────────────────────────────────────────
+// @desc    Get single audit log by ID
+// @route   GET /api/admin/audit-logs/:id
+// @access  Private (ADMIN or HELPER)
+// ─────────────────────────────────────────────
+exports.getAuditLogById = async (req, res, next) => {
+  try {
+    const log = await AuditLog.findById(req.params.id)
+      .populate("user_id", "name email role status")
+      .lean();
+
+    if (!log) {
+      return res.status(404).json({ success: false, message: "Audit event record not found" });
+    }
+
+    let severity = "Low";
+    if (log.status === "BLOCKED") severity = "Critical";
+    else if (log.status === "FAILURE") severity = "High";
+    else if (log.status === "WARNING") severity = "Medium";
+
+    const formatted = {
+      id: log._id.toString(),
+      timestamp: new Date(log.createdAt).toLocaleString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      }),
+      utcTimestamp: new Date(log.createdAt).toUTCString(),
+      severity,
+      status: log.status,
+      category: log.category,
+      module: log.category ? (log.category.charAt(0).toUpperCase() + log.category.slice(1).toLowerCase()) : "System",
+      actor: log.user_id ? log.user_id.name : "System / Guest",
+      actorEmail: log.user_id?.email || null,
+      actorId: log.user_id ? log.user_id._id.toString() : "SYS-001",
+      actorRole: log.user_id?.role || "SYSTEM",
+      actorType: log.user_id?.role ? log.user_id.role.toLowerCase() : "system",
+      eventType: log.action,
+      actionTitle: log.action.replace(/_/g, " "),
+      targetEntity: log.resource_id || log.resource_type || "N/A",
+      resourceType: log.resource_type,
+      resourceId: log.resource_id,
+      description: log.message || `Executed ${log.action} on ${log.resource_type}`,
+      location: log.ip_address || "127.0.0.1",
+      city: log.metadata?.city || "Internal Network",
+      userAgent: log.user_agent || null,
+      destructive: ["BLOCKED", "FAILURE"].includes(log.status) || log.action.includes("DELETE") || log.action.includes("UNLINK"),
+      reasonCode: log.metadata?.reason || log.message || "Standard administrative event.",
+      metadata: log.metadata || {},
+      diff: log.metadata?.diff || null,
+      rawRecord: log,
+    };
+
+    res.status(200).json({ success: true, data: formatted });
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+// ─────────────────────────────────────────────
 // @desc    Get audit KPIs (24h events, security alerts, admin changes, user actions)
 // @route   GET /api/admin/audit-logs/stats
 // @access  Private (ADMIN or HELPER)

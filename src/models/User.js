@@ -89,14 +89,13 @@ const userSchema = new mongoose.Schema(
 );
 
 // Encrypt password before saving (only if password exists and is modified)
-userSchema.pre("save", async function (next) {
+userSchema.pre("save", async function () {
   if (!this.isModified("password") || !this.password) {
-    return next();
+    return;
   }
 
   const salt = await bcrypt.genSalt(12);
   this.password = await bcrypt.hash(this.password, salt);
-  next();
 });
 
 // Match user entered password to hashed password in database

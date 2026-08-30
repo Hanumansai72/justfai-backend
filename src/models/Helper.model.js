@@ -110,13 +110,12 @@ const helperSchema = new mongoose.Schema(
 );
 
 // Encrypt password before saving
-helperSchema.pre("save", async function (next) {
+helperSchema.pre("save", async function () {
   if (!this.isModified("password") || !this.password) {
-    return next();
+    return;
   }
   const salt = await bcrypt.genSalt(12);
   this.password = await bcrypt.hash(this.password, salt);
-  next();
 });
 
 // Match password helper

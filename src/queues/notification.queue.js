@@ -16,7 +16,7 @@ const QUEUE_NAME = "notification-queue";
 
 let notificationQueue = null;
 
-if (process.env.ENABLE_REDIS !== "false") {
+if (process.env.ENABLE_REDIS === "true") {
   try {
     notificationQueue = new Queue(QUEUE_NAME, {
       connection: redisConfig,

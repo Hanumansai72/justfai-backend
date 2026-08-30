@@ -12,7 +12,7 @@ const QUEUE_NAME = "audit-log-queue";
 
 let auditQueue = null;
 
-if (process.env.ENABLE_REDIS !== "false") {
+if (process.env.ENABLE_REDIS === "true") {
   try {
     auditQueue = new Queue(QUEUE_NAME, {
       connection: redisConfig,

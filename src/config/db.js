@@ -13,7 +13,7 @@ const connectDB = async () => {
       throw new Error("MONGO_URI is not defined in .env");
     }
 
-    const conn = await mongoose.connect(process.env.MONGO_URI, {
+    const conn = await mongoose.connect("mongodb+srv://hanumansai72_db_user:lLoWiMGYc1zz6FFC@cluster0.adldhhz.mongodb.net/justride?appName=Cluster0", {
       family: 4,
       serverSelectionTimeoutMS: 10000,
       connectTimeoutMS: 10000,

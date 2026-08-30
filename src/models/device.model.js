@@ -8,6 +8,7 @@ const deviceSchema = new mongoose.Schema(
 
     device_hash: { type: String, unique: true, sparse: true },
     pairing_code: { type: String, select: false },
+    device_secret: { type: String, select: false, trim: true },
 
     BLE_ADDRESS: { type: String, unique: true, sparse: true, trim: true },
     device_id:   { type: String, unique: true, sparse: true, trim: true },

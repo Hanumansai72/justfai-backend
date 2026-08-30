@@ -29,13 +29,15 @@ const hashString = (value) =>
 
 /**
  * HMAC-SHA256 device hash.
- * Binds BLE_ADDRESS + random pairing code into a single secret token.
+ * Binds BLE_ADDRESS + random pairing code into a single secret token using the device's secret key.
  */
-const generateDeviceHash = (bleAddress, randomCode) =>
-  crypto
-    .createHmac("sha256", DEVICE_SECRET)
+const generateDeviceHash = (bleAddress, randomCode, customSecret = null) => {
+  const secretKey = customSecret || DEVICE_SECRET;
+  return crypto
+    .createHmac("sha256", secretKey)
     .update(`${formatBleAddress(bleAddress)}:${randomCode}`)
     .digest("hex");
+};
 
 /**
  * Constant-time string comparison — prevents timing-based hash oracle attacks.

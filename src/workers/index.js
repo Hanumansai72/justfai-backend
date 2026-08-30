@@ -7,8 +7,8 @@ const { startNotificationWorker } = require("./notification.worker");
 const { startAuditWorker }        = require("./audit.worker");
 
 const startWorkers = () => {
-  if (process.env.ENABLE_REDIS === "false") {
-    console.log("[Workers] Background workers skipped (ENABLE_REDIS=false)");
+  if (process.env.ENABLE_REDIS !== "true") {
+    console.log("[Workers] Background workers skipped (ENABLE_REDIS is not 'true')");
     return;
   }
 
