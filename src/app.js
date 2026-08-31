@@ -18,6 +18,7 @@ const savedAddressRoutes = require("./routes/savedAddressRoutes");
 const deviceRoutes = require("./routes/deviceRoutes");
 const notificationRoutes = require("./routes/notificationRoutes");
 const supportRoutes = require("./routes/supportRoutes");
+const chatRoutes = require("./routes/chatRoutes");
 const uploadRoutes = require("./routes/uploadRoutes");
 const adminRoutes = require("./routes/adminRoutes");
 
@@ -38,12 +39,23 @@ app.use(
 // ─────────────────────────────────────────────────────────────
 const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(",").map((o) => o.trim())
-  : ["http://localhost:3000", "http://localhost:5173"];
+  : ["http://localhost:3000", "http://localhost:5173", "http://localhost:8080"];
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
+      // Allow requests with no origin (like mobile apps, curl, Postman)
+      if (!origin) return callback(null, true);
+
+      // In development, allow any localhost or 127.0.0.1 port (e.g. Flutter Web, React, Vite)
+      if (
+        process.env.NODE_ENV !== "production" &&
+        /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)
+      ) {
+        return callback(null, true);
+      }
+
+      if (allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
         callback(new Error(`CORS: Origin '${origin}' is not allowed`));
@@ -98,6 +110,7 @@ app.use("/api/addresses", savedAddressRoutes);
 app.use("/api/devices", deviceRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/support", supportRoutes);
+app.use("/api/chat", chatRoutes);
 app.use("/api/upload", uploadRoutes);
 app.use("/api/admin", adminRoutes);
 

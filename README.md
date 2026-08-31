@@ -11,6 +11,8 @@
 
 ## 📖 Overview
 
+> 💡 **New to the project?** Check out the comprehensive [Developer Guide & Architecture Reference](DEVELOPER_GUIDE.md) for a detailed file-by-file breakdown, system diagrams, and step-by-step instructions on building new features.
+
 The **JustRide Backend** is a production-grade, modular Node.js/Express server providing enterprise REST APIs for:
 - **Rider Authentication & OAuth Lifecycle**: JWT Access (15m) & Refresh token rotation with bcrypt password hashing.
 - **BLE Hardware Telemetry & Pairing**: Device state tracking, battery telemetry, signal RSSI monitoring, and remote force-unlinking.

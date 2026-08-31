@@ -58,6 +58,7 @@ const issueTokensAndRespond = async (res, user, statusCode = 200, customMessage 
   return res.status(statusCode).json({
     success: true,
     ...(customMessage && { message: customMessage }),
+    token: accessToken, // Alias for clients expecting 'token'
     accessToken,
     refreshToken,
     data: formatUserResponse(user),
@@ -342,6 +343,7 @@ exports.refreshToken = async (req, res, next) => {
     res.status(200).json({
       success: true,
       message: "Token refreshed successfully",
+      token: newAccessToken,
       accessToken: newAccessToken,
       refreshToken: newRefreshToken,
     });

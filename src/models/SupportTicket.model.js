@@ -77,12 +77,11 @@ const supportTicketSchema = new mongoose.Schema(
 );
 
 // Auto-generate ticket_number before first save
-supportTicketSchema.pre("save", async function (next) {
+supportTicketSchema.pre("save", async function () {
   if (!this.ticket_number) {
     const count = await mongoose.model("SupportTicket").countDocuments();
     this.ticket_number = `TKT-${String(count + 1).padStart(6, "0")}`;
   }
-  next();
 });
 
 // Dashboard query: open tickets by priority, newest first
