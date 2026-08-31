@@ -42,7 +42,13 @@ app.use(
 // ─────────────────────────────────────────────────────────────
 const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(",").map((o) => o.trim())
-  : ["http://localhost:3000", "http://localhost:5173", "http://localhost:8080"];
+  : [
+      "http://localhost:3000",
+      "http://localhost:5173",
+      "http://localhost:8080",
+      "https://justride-admin.vercel.app",
+      "https://justrideadminpage.vercel.app",
+    ];
 
 app.use(
   cors({
@@ -50,13 +56,23 @@ app.use(
       // Allow requests with no origin (like mobile apps, curl, Postman)
       if (!origin) return callback(null, true);
 
-      // In development, allow any localhost or 127.0.0.1 port (e.g. Flutter Web, React, Vite)
-      if (
-        process.env.NODE_ENV !== "production" &&
-        /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)
-      ) {
+      // Wildcard origin support
+      if (allowedOrigins.includes("*")) {
         return callback(null, true);
       }
+
+      // Allow any localhost / 127.0.0.1 port
+      if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+        return callback(null, true);
+      }
+
+      // Allow all JustRide and Vercel deployed frontends (*.vercel.app)
+      try {
+        const hostname = new URL(origin).hostname;
+        if (hostname.endsWith(".vercel.app") || hostname.endsWith("justride.io")) {
+          return callback(null, true);
+        }
+      } catch (e) {}
 
       if (allowedOrigins.includes(origin)) {
         callback(null, true);
@@ -65,7 +81,7 @@ app.use(
       }
     },
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    allowedHeaders: ["Content-Type", "Authorization", "x-auth-token", "Accept", "Origin"],
     credentials: true,
   })
 );
