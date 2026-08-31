@@ -14,6 +14,7 @@ const createLimiter = ({ windowMs, max, message }) =>
     max,
     standardHeaders: true,
     legacyHeaders: false,
+    validate: { xForwardedForHeader: false },
     handler: (req, res) => {
       log({
         req,

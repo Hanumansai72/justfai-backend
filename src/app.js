@@ -24,6 +24,9 @@ const adminRoutes = require("./routes/adminRoutes");
 
 const app = express();
 
+// Trust reverse proxies (Vercel, Render, Cloudflare, AWS, Nginx)
+app.set("trust proxy", 1);
+
 // ─────────────────────────────────────────────────────────────
 // Security Headers
 // ─────────────────────────────────────────────────────────────
