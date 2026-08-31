@@ -99,6 +99,23 @@ app.use(sanitizeXss);
 app.use(securityLogger);
 
 // ─────────────────────────────────────────────────────────────
+// Ensure Database Connected (Critical for Serverless/Cloud Lambdas)
+// ─────────────────────────────────────────────────────────────
+const mongoose = require("mongoose");
+const connectDB = require("./config/db");
+
+app.use(async (req, res, next) => {
+  try {
+    if (mongoose.connection.readyState !== 1) {
+      await connectDB();
+    }
+    next();
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
 // Health Check
 // ─────────────────────────────────────────────────────────────
 app.get("/", (req, res) => {
