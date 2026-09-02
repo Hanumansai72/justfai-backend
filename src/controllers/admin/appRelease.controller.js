@@ -2,9 +2,10 @@
  * controllers/admin/appRelease.controller.js
  * Comprehensive Mobile App APK Release Management on Cloudflare R2
  */
-const AppRelease   = require("../../models/AppRelease.model");
-const audit        = require("../../security/auditLogger");
-const cloudflareR2 = require("../../services/cloudflareR2.service");
+const AppRelease      = require("../../models/AppRelease.model");
+const audit           = require("../../security/auditLogger");
+const cloudflareR2    = require("../../services/cloudflareR2.service");
+const releaseNotifier = require("../../services/releaseNotification.service");
 
 // ─────────────────────────────────────────────
 // @desc    Get Presigned URL to upload APK directly to Cloudflare R2 (Bypasses Vercel 4.5MB payload limit)
@@ -113,6 +114,11 @@ exports.createAppRelease = async (req, res, next) => {
       resource_type: "AppRelease",
       resource_id: release._id,
       message: `App APK release created: v${cleanVersion} (b${build_number}) -> Cloudflare R2`,
+    });
+
+    // Broadcast app update notification asynchronously to all active app users
+    releaseNotifier.notifyAppRelease(release).catch((err) => {
+      console.warn("[AppRelease] Notification dispatch error:", err.message);
     });
 
     res.status(201).json({
@@ -253,6 +259,11 @@ exports.selectFeaturedRelease = async (req, res, next) => {
     release.is_featured = true;
     release.is_active = true;
     await release.save();
+
+    // Broadcast app update notification asynchronously to all active app users
+    releaseNotifier.notifyAppRelease(release).catch((err) => {
+      console.warn("[AppRelease] Notification dispatch error:", err.message);
+    });
 
     res.status(200).json({
       success: true,

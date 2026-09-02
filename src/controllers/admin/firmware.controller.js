@@ -12,6 +12,7 @@ const FirmwareRelease  = require("../../models/FirmwareRelease.model");
 const Device           = require("../../models/device.model");
 const audit            = require("../../security/auditLogger");
 const cloudflareR2     = require("../../services/cloudflareR2.service");
+const releaseNotifier  = require("../../services/releaseNotification.service");
 
 // ─────────────────────────────────────────────
 // @desc    Create a new firmware release (supports direct binary file upload to R2)
@@ -72,6 +73,11 @@ exports.createFirmwareRelease = async (req, res, next) => {
       req, category: "FIRMWARE", action: "FIRMWARE_RELEASE_CREATE", status: "SUCCESS",
       resource_type: "Firmware", resource_id: release._id,
       message: `Firmware release created: v${cleanVersion} (${channel || "stable"}) -> Cloudflare R2`,
+    });
+
+    // Broadcast update notification asynchronously to all paired device owners
+    releaseNotifier.notifyFirmwareRelease(release).catch((err) => {
+      console.warn("[FirmwareRelease] Notification dispatch error:", err.message);
     });
 
     res.status(201).json({ success: true, message: "Firmware release published successfully to Cloudflare R2", data: release });
@@ -225,6 +231,11 @@ exports.selectFeaturedFirmware = async (req, res, next) => {
     release.is_featured = true;
     release.is_active = true;
     await release.save();
+
+    // Broadcast update notification asynchronously to all paired device owners
+    releaseNotifier.notifyFirmwareRelease(release).catch((err) => {
+      console.warn("[FirmwareRelease] Notification dispatch error:", err.message);
+    });
 
     res.status(200).json({
       success: true,

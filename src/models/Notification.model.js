@@ -42,6 +42,7 @@ const notificationSchema = new mongoose.Schema(
       enum: [
         // User notification types
         "FIRMWARE_UPDATE",
+        "APP_UPDATE",
         "DEVICE_DISCONNECTED",
         "DEVICE_PAIRING",
         "SECURITY_ALERT",
