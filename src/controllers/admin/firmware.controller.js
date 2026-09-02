@@ -210,6 +210,12 @@ exports.deleteFirmwareRelease = async (req, res, next) => {
       message: `Firmware release deleted: v${release.version}`,
     });
 
+    res.status(200).json({ success: true, message: `Firmware release v${release.version} deleted` });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // ─────────────────────────────────────────────
 // @desc    Set a firmware release as Featured / Active for website & mobile OTA
 // @route   PATCH /api/admin/firmware/:id/feature
