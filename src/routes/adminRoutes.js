@@ -89,25 +89,34 @@ const firmwareUpload = require("../middlewares/firmwareUpload");
 const apkUpload      = require("../middlewares/apkUpload");
 
 const {
+  createFirmwareRelease, getFirmwareReleases,
+  updateFirmwareRelease, deleteFirmwareRelease,
+  selectFeaturedFirmware,
+} = require("../controllers/admin/firmware.controller");
+
+const {
   getUploadUrl,
   createAppRelease,
   getAppReleases,
   updateAppRelease,
   deleteAppRelease,
+  selectFeaturedRelease,
 } = require("../controllers/admin/appRelease.controller");
 
 // Firmware Releases (Admin only - supports direct .bin upload)
-router.post("/firmware",       authorize("ADMIN"), firmwareUpload.single("firmware_file"), createFirmwareRelease);
-router.get("/firmware",        authorize("ADMIN", "HELPER"), getFirmwareReleases);
-router.put("/firmware/:id",    authorize("ADMIN"), updateFirmwareRelease);
-router.delete("/firmware/:id", authorize("ADMIN"), deleteFirmwareRelease);
+router.post("/firmware",              authorize("ADMIN"), firmwareUpload.single("firmware_file"), createFirmwareRelease);
+router.get("/firmware",               authorize("ADMIN", "HELPER"), getFirmwareReleases);
+router.put("/firmware/:id",           authorize("ADMIN"), updateFirmwareRelease);
+router.patch("/firmware/:id/feature", authorize("ADMIN"), selectFeaturedFirmware);
+router.delete("/firmware/:id",        authorize("ADMIN"), deleteFirmwareRelease);
 
 // Mobile App APK Releases (Admin only - supports direct .apk upload to Cloudflare R2)
-router.post("/app-releases/upload-url", authorize("ADMIN"), getUploadUrl);
-router.post("/app-releases",            authorize("ADMIN"), apkUpload.single("apk_file"), createAppRelease);
-router.get("/app-releases",             authorize("ADMIN", "HELPER"), getAppReleases);
-router.put("/app-releases/:id",         authorize("ADMIN"), updateAppRelease);
-router.delete("/app-releases/:id",      authorize("ADMIN"), deleteAppRelease);
+router.post("/app-releases/upload-url",  authorize("ADMIN"), getUploadUrl);
+router.post("/app-releases",             authorize("ADMIN"), apkUpload.single("apk_file"), createAppRelease);
+router.get("/app-releases",              authorize("ADMIN", "HELPER"), getAppReleases);
+router.put("/app-releases/:id",          authorize("ADMIN"), updateAppRelease);
+router.patch("/app-releases/:id/feature",authorize("ADMIN"), selectFeaturedRelease);
+router.delete("/app-releases/:id",       authorize("ADMIN"), deleteAppRelease);
 
 // Staff Notifications & Real-Time Alerts
 const {

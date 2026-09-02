@@ -139,11 +139,13 @@ app.get("/", (req, res) => {
 });
 
 const { getLatestAppUpdate } = require("./controllers/admin/appRelease.controller");
+const { getLatestPublicFirmware } = require("./controllers/admin/firmware.controller");
 
 // ─────────────────────────────────────────────────────────────
 // API Routes
 // ─────────────────────────────────────────────────────────────
 app.get("/api/app-releases/latest", getLatestAppUpdate);
+app.get("/api/firmware/latest",     getLatestPublicFirmware);
 app.use("/api/users", userRoutes);
 app.use("/api/addresses", savedAddressRoutes);
 app.use("/api/devices", deviceRoutes);

@@ -45,6 +45,12 @@ const firmwareReleaseSchema = new mongoose.Schema(
       default: true,
       index: true,
     },
+    // Featured / Primary version shown on Website / Mobile app
+    is_featured: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
     // Stable | Beta | Deprecated
     channel: {
       type: String,

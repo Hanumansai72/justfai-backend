@@ -37,6 +37,12 @@ const appReleaseSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    // Featured / Active release shown on the website download page and default update target
+    is_featured: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
     release_notes: {
       type: String,
       trim: true,

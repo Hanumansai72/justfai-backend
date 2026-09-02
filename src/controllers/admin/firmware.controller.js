@@ -204,7 +204,80 @@ exports.deleteFirmwareRelease = async (req, res, next) => {
       message: `Firmware release deleted: v${release.version}`,
     });
 
-    res.status(200).json({ success: true, message: `Firmware release v${release.version} deleted` });
+// ─────────────────────────────────────────────
+// @desc    Set a firmware release as Featured / Active for website & mobile OTA
+// @route   PATCH /api/admin/firmware/:id/feature
+// @access  Private/Admin
+// ─────────────────────────────────────────────
+exports.selectFeaturedFirmware = async (req, res, next) => {
+  try {
+    const release = await FirmwareRelease.findById(req.params.id);
+    if (!release) {
+      return res.status(404).json({ success: false, message: "Firmware release not found" });
+    }
+
+    // Unset other featured releases
+    await FirmwareRelease.updateMany(
+      { _id: { $ne: release._id } },
+      { $set: { is_featured: false } }
+    );
+
+    release.is_featured = true;
+    release.is_active = true;
+    await release.save();
+
+    res.status(200).json({
+      success: true,
+      message: `Firmware release v${release.version} is now the active Featured release across Website and Mobile App!`,
+      data: release,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ─────────────────────────────────────────────
+// @desc    Public endpoint to get latest active/featured firmware for website showcase & OTA
+// @route   GET /api/firmware/latest
+// @access  Public
+// ─────────────────────────────────────────────
+exports.getLatestPublicFirmware = async (req, res, next) => {
+  try {
+    // 1. Check if admin explicitly marked one as featured
+    let latest = await FirmwareRelease.findOne({ is_featured: true, is_active: true }).lean();
+
+    // 2. Fall back to newest stable
+    if (!latest) {
+      latest = await FirmwareRelease.findOne({ is_active: true, channel: "stable" })
+        .sort({ release_date: -1 })
+        .lean();
+    }
+
+    if (!latest) {
+      return res.status(200).json({
+        success: true,
+        data: {
+          version: "2.5.4",
+          channel: "stable",
+          release_notes: "20% Faster Roundabout calculation • Improved Sunlight Auto-dim curve",
+        },
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        id: latest._id,
+        version: latest.version,
+        channel: latest.channel,
+        device_type: latest.device_type,
+        release_notes: latest.release_notes,
+        file_url: latest.file_url,
+        checksum: latest.checksum,
+        is_featured: !!latest.is_featured,
+        release_date: latest.release_date,
+      },
+    });
   } catch (error) {
     next(error);
   }

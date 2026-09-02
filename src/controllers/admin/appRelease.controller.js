@@ -232,21 +232,63 @@ exports.deleteAppRelease = async (req, res, next) => {
 };
 
 // ─────────────────────────────────────────────
-// @desc    Public / Mobile App endpoint to check latest APK update
+// ─────────────────────────────────────────────
+// @desc    Set an app release as the Featured release shown on website and app
+// @route   PATCH /api/admin/app-releases/:id/feature
+// @access  Private/Admin
+// ─────────────────────────────────────────────
+exports.selectFeaturedRelease = async (req, res, next) => {
+  try {
+    const release = await AppRelease.findById(req.params.id);
+    if (!release) {
+      return res.status(404).json({ success: false, message: "App release not found" });
+    }
+
+    // Unset any existing featured release for this platform
+    await AppRelease.updateMany(
+      { platform: release.platform, _id: { $ne: release._id } },
+      { $set: { is_featured: false } }
+    );
+
+    release.is_featured = true;
+    release.is_active = true;
+    await release.save();
+
+    res.status(200).json({
+      success: true,
+      message: `App release v${release.version} (Build #${release.build_number}) is now set as the Featured release for ${release.platform}!`,
+      data: release,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ─────────────────────────────────────────────
+// @desc    Public / Mobile App endpoint to check latest APK update (prioritizes is_featured release)
 // @route   GET /api/app-releases/latest?platform=android&current_build=1
 // @access  Public
 // ─────────────────────────────────────────────
 exports.getLatestAppUpdate = async (req, res, next) => {
   try {
-    const { platform = "android", channel = "stable", current_build } = req.query;
+    const { platform = "android", channel, current_build } = req.query;
 
-    const latest = await AppRelease.findOne({
+    // 1. Check if admin explicitly selected a featured release
+    let latest = await AppRelease.findOne({
       platform,
-      channel,
+      is_featured: true,
       is_active: true,
-    })
-      .sort({ build_number: -1 })
-      .lean();
+    }).lean();
+
+    // 2. If no featured flag set, fall back to highest build number
+    if (!latest) {
+      const filter = { platform, is_active: true };
+      if (channel) filter.channel = channel;
+
+      latest = await AppRelease.findOne(filter)
+        .sort({ build_number: -1 })
+        .lean();
+    }
 
     if (!latest) {
       return res.status(200).json({
@@ -263,11 +305,13 @@ exports.getLatestAppUpdate = async (req, res, next) => {
       success: true,
       update_available: updateAvailable,
       data: {
+        id: latest._id,
         version: latest.version,
         build_number: latest.build_number,
         platform: latest.platform,
         channel: latest.channel,
         is_mandatory: latest.is_mandatory,
+        is_featured: !!latest.is_featured,
         release_notes: latest.release_notes,
         download_url: latest.file_url,
         file_size_bytes: latest.file_size_bytes,
