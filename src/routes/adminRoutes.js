@@ -85,8 +85,10 @@ router.patch("/devices/:id/retire",       authorize("ADMIN"),           retireDe
 router.get("/pairing",                    authorize("ADMIN", "HELPER"), getPairingRequests);
 router.patch("/pairing/:id/force-unpair", authorize("ADMIN", "HELPER"), forceUnpairDevice);
 
-// Firmware Releases (Admin only)
-router.post("/firmware",       authorize("ADMIN"), createFirmwareRelease);
+const firmwareUpload = require("../middlewares/firmwareUpload");
+
+// Firmware Releases (Admin only - supports direct .bin upload)
+router.post("/firmware",       authorize("ADMIN"), firmwareUpload.single("firmware_file"), createFirmwareRelease);
 router.get("/firmware",        authorize("ADMIN", "HELPER"), getFirmwareReleases);
 router.put("/firmware/:id",    authorize("ADMIN"), updateFirmwareRelease);
 router.delete("/firmware/:id", authorize("ADMIN"), deleteFirmwareRelease);

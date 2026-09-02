@@ -8,12 +8,13 @@
  *   - deleteFirmwareRelease: soft delete (is_active=false) to preserve history;
  *     hard delete only allowed via a separate query if no devices reference the version
  */
-const FirmwareRelease = require("../../models/FirmwareRelease.model");
-const Device          = require("../../models/device.model");
-const audit           = require("../../security/auditLogger");
+const FirmwareRelease  = require("../../models/FirmwareRelease.model");
+const Device           = require("../../models/device.model");
+const audit            = require("../../security/auditLogger");
+const cloudflareR2     = require("../../services/cloudflareR2.service");
 
 // ─────────────────────────────────────────────
-// @desc    Create a new firmware release
+// @desc    Create a new firmware release (supports direct binary file upload to R2)
 // @route   POST /api/admin/firmware
 // @access  Private/Admin
 // ─────────────────────────────────────────────
@@ -21,26 +22,46 @@ exports.createFirmwareRelease = async (req, res, next) => {
   try {
     const {
       version, device_type, min_supported_version,
-      release_notes, file_url, checksum, channel,
+      release_notes, channel,
     } = req.body;
+
+    let { file_url, checksum } = req.body;
 
     if (!version) {
       return res.status(400).json({ success: false, message: "version is required" });
     }
 
-    // .exists() — minimal check, returns { _id } or null — cheaper than findOne
-    const duplicate = await FirmwareRelease.exists({ version });
+    const cleanVersion = version.trim().replace(/^v/i, "");
+
+    // 1. Duplicate check
+    const duplicate = await FirmwareRelease.exists({ version: cleanVersion });
     if (duplicate) {
       return res.status(409).json({
         success: false,
-        message: `Firmware version '${version}' already exists`,
+        message: `Firmware version '${cleanVersion}' already exists`,
         existing_id: duplicate._id,
       });
     }
 
+    // 2. If a physical .bin file was uploaded in the request, stream to Cloudflare R2
+    if (req.file) {
+      const fileName = `firmware/v${cleanVersion}-${(device_type || "justride").toLowerCase().replace(/\s+/g, "_")}.bin`;
+      const uploadRes = await cloudflareR2.uploadFirmware(req.file.buffer, fileName);
+      file_url = uploadRes.url;
+      checksum = uploadRes.sha256;
+    }
+
+    if (!file_url) {
+      return res.status(400).json({ success: false, message: "A .bin file or file_url is required" });
+    }
+
     const release = await FirmwareRelease.create({
-      version, device_type, min_supported_version,
-      release_notes, file_url, checksum,
+      version: cleanVersion,
+      device_type,
+      min_supported_version,
+      release_notes,
+      file_url,
+      checksum,
       channel: channel || "stable",
       released_by: req.user._id,
       release_date: new Date(),
@@ -50,10 +71,10 @@ exports.createFirmwareRelease = async (req, res, next) => {
     audit.log({
       req, category: "FIRMWARE", action: "FIRMWARE_RELEASE_CREATE", status: "SUCCESS",
       resource_type: "Firmware", resource_id: release._id,
-      message: `Firmware release created: v${version} (${channel || "stable"})`,
+      message: `Firmware release created: v${cleanVersion} (${channel || "stable"}) -> Cloudflare R2`,
     });
 
-    res.status(201).json({ success: true, message: "Firmware release created", data: release });
+    res.status(201).json({ success: true, message: "Firmware release published successfully to Cloudflare R2", data: release });
   } catch (error) {
     next(error);
   }
