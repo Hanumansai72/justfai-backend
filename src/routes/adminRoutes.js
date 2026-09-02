@@ -33,10 +33,6 @@ const {
 } = require("../controllers/admin/devices.controller");
 const { getPairingRequests, forceUnpairDevice }               = require("../controllers/admin/pairing.controller");
 const {
-  createFirmwareRelease, getFirmwareReleases,
-  updateFirmwareRelease, deleteFirmwareRelease,
-} = require("../controllers/admin/firmware.controller");
-const {
   getSupportTickets,
   getSupportTicket,
   updateSupportTicket,
