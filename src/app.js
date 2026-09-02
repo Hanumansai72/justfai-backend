@@ -138,9 +138,12 @@ app.get("/", (req, res) => {
   res.json({ message: "JustRide API is running 🚀", env: process.env.NODE_ENV });
 });
 
+const { getLatestAppUpdate } = require("./controllers/admin/appRelease.controller");
+
 // ─────────────────────────────────────────────────────────────
 // API Routes
 // ─────────────────────────────────────────────────────────────
+app.get("/api/app-releases/latest", getLatestAppUpdate);
 app.use("/api/users", userRoutes);
 app.use("/api/addresses", savedAddressRoutes);
 app.use("/api/devices", deviceRoutes);

@@ -14,4 +14,5 @@ module.exports = {
   FirmwareRelease: require("./FirmwareRelease.model"),
   FirmwareHistory: require("./FirmwareHistory.model"),
   AuditLog:        require("./AuditLog.model"),
+  AppRelease:      require("./AppRelease.model"),
 };

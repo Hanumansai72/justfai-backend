@@ -86,12 +86,26 @@ router.get("/pairing",                    authorize("ADMIN", "HELPER"), getPairi
 router.patch("/pairing/:id/force-unpair", authorize("ADMIN", "HELPER"), forceUnpairDevice);
 
 const firmwareUpload = require("../middlewares/firmwareUpload");
+const apkUpload      = require("../middlewares/apkUpload");
+
+const {
+  createAppRelease,
+  getAppReleases,
+  updateAppRelease,
+  deleteAppRelease,
+} = require("../controllers/admin/appRelease.controller");
 
 // Firmware Releases (Admin only - supports direct .bin upload)
 router.post("/firmware",       authorize("ADMIN"), firmwareUpload.single("firmware_file"), createFirmwareRelease);
 router.get("/firmware",        authorize("ADMIN", "HELPER"), getFirmwareReleases);
 router.put("/firmware/:id",    authorize("ADMIN"), updateFirmwareRelease);
 router.delete("/firmware/:id", authorize("ADMIN"), deleteFirmwareRelease);
+
+// Mobile App APK Releases (Admin only - supports direct .apk upload to Cloudflare R2)
+router.post("/app-releases",       authorize("ADMIN"), apkUpload.single("apk_file"), createAppRelease);
+router.get("/app-releases",        authorize("ADMIN", "HELPER"), getAppReleases);
+router.put("/app-releases/:id",    authorize("ADMIN"), updateAppRelease);
+router.delete("/app-releases/:id", authorize("ADMIN"), deleteAppRelease);
 
 // Staff Notifications & Real-Time Alerts
 const {

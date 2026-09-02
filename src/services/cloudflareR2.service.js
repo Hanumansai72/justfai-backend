@@ -68,7 +68,41 @@ class CloudflareR2Service {
   }
 
   /**
-   * Delete firmware binary from R2
+   * Upload an Android APK or iOS package to Cloudflare R2
+   * @param {Buffer} fileBuffer Binary buffer of the compiled APK
+   * @param {string} fileName Destination key (e.g. "apk/v2.2.0-justride-release.apk")
+   * @returns {Promise<{ url: string, sha256: string, size: number }>}
+   */
+  async uploadApk(fileBuffer, fileName) {
+    const hash = crypto.createHash("sha256").update(fileBuffer).digest("hex");
+    const size = fileBuffer.length;
+
+    if (!this.isConfigured) {
+      return {
+        url: `${this.publicDomain}/${fileName}`,
+        sha256: hash,
+        size,
+      };
+    }
+
+    const command = new PutObjectCommand({
+      Bucket: this.bucketName,
+      Key: fileName,
+      Body: fileBuffer,
+      ContentType: "application/vnd.android.package-archive",
+    });
+
+    await this.client.send(command);
+
+    return {
+      url: `${this.publicDomain}/${fileName}`,
+      sha256: hash,
+      size,
+    };
+  }
+
+  /**
+   * Delete firmware or APK binary from R2
    * @param {string} fileName Key to delete
    */
   async deleteFirmware(fileName) {
