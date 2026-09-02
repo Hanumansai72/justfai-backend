@@ -8,12 +8,12 @@ const crypto = require("crypto");
 
 class CloudflareR2Service {
   constructor() {
-    const accountId = process.env.R2_ACCOUNT_ID;
-    const accessKeyId = process.env.R2_ACCESS_KEY_ID;
-    const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
+    const accountId = process.env.R2_ACCOUNT_ID || "b3fa96c6b0ba76781ad13a88da5aafde";
+    const accessKeyId = process.env.R2_ACCESS_KEY_ID || "836dfd83f52625dbac7fcd7e1c777af3";
+    const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY || "46a2467b0464c310e7996710e8cfd444217d8301d6a16fe700a1c573644909b6";
 
-    this.bucketName = process.env.R2_BUCKET_NAME || "justride-ota";
-    this.publicDomain = process.env.R2_PUBLIC_DOMAIN || `https://${this.bucketName}.r2.dev`;
+    this.bucketName = process.env.R2_BUCKET_NAME || "justride";
+    this.publicDomain = process.env.R2_PUBLIC_DOMAIN || "https://pub-8ae75bb9134b4bf7ad3bdadf97c3ec21.r2.dev";
 
     if (accountId && accessKeyId && secretAccessKey) {
       this.client = new S3Client({
