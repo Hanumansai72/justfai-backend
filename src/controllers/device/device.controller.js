@@ -113,10 +113,36 @@ exports.getMyDevice = async (req, res, next) => {
       .populate("linked_to", "name email phonenumber")
       .lean();
 
+    if (!device) {
+      return res.status(200).json({
+        success: true,
+        data: null,
+        message: "No device is currently paired with this account",
+      });
+    }
+
+    // Safety guard: if device was blocked/retired while paired, force-disconnect and unpair
+    if (device.is_blocked || !device.is_active || device.is_retired) {
+      await Device.updateOne(
+        { _id: device._id },
+        {
+          $set:   { is_paired: false, linked_to: null, unlink_date: new Date() },
+          $unset: { device_hash: "", pairing_code: "", unlink_otp: "", unlink_otp_expires: "" },
+        }
+      );
+
+      return res.status(403).json({
+        success: false,
+        is_blocked: device.is_blocked,
+        can_pair: false,
+        message: `Your device has been ${device.is_blocked ? "blocked" : device.is_retired ? "retired" : "deactivated"} and disconnected.`,
+        data: null,
+      });
+    }
+
     res.status(200).json({
       success: true,
-      data:    device || null,
-      message: device ? undefined : "No device is currently paired with this account",
+      data: device,
     });
   } catch (error) {
     next(error);

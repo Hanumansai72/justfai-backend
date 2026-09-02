@@ -10,6 +10,7 @@
  */
 const Device = require("../../models/device.model");
 const audit  = require("../../security/auditLogger");
+const { sendNotification } = require("../notification.controller");
 const { formatBleAddress, generateRandomCode, findDeviceByIdentifier } = require("../../utils/deviceCrypto");
 
 const DEVICE_PROJECTION = "-pairing_code -unlink_otp -__v";
@@ -180,7 +181,15 @@ exports.blockDevice = async (req, res, next) => {
   try {
     const { reason } = req.body;
 
-    // Single atomic write — no need to load the document first
+    const existing = await Device.findById(req.params.id)
+      .select("_id devicename device_id BLE_ADDRESS is_paired linked_to")
+      .lean();
+
+    if (!existing) return res.status(404).json({ success: false, message: "Device not found" });
+
+    const previousOwner = existing.linked_to;
+
+    // Atomic update: block, deactivate, and force-unpair from any linked account
     const device = await Device.findByIdAndUpdate(
       req.params.id,
       {
@@ -190,20 +199,39 @@ exports.blockDevice = async (req, res, next) => {
           blocked_at:   new Date(),
           blocked_by:   req.user._id,
           is_active:    false,
+          is_paired:    false,
+          linked_to:    null,
+          unlink_date:  new Date(),
+          unlink_by:    req.user._id,
+        },
+        $unset: {
+          device_hash:        "",
+          pairing_code:       "",
+          unlink_otp:         "",
+          unlink_otp_expires: "",
         },
       },
-      { new: true, select: "devicename device_id BLE_ADDRESS is_blocked block_reason blocked_at" }
+      { new: true, select: "devicename device_id BLE_ADDRESS is_blocked block_reason blocked_at is_paired" }
     ).lean();
-
-    if (!device) return res.status(404).json({ success: false, message: "Device not found" });
 
     audit.log({
       req, category: "ADMIN", action: "DEVICE_BLOCK", status: "SUCCESS",
       resource_type: "Device", resource_id: req.params.id,
-      message: `Device blocked: ${device.device_id} — ${reason || "no reason"}`,
+      message: `Device blocked and unlinked: ${device.device_id} — ${reason || "no reason"}`,
     });
 
-    res.status(200).json({ success: true, message: "Device blocked successfully", data: device });
+    // Notify previously linked user that device was blocked and disconnected
+    if (previousOwner) {
+      await sendNotification({
+        user_id: previousOwner,
+        type: "DEVICE_BLOCKED",
+        title: "Device Blocked & Disconnected",
+        message: `Your device (${device.devicename || device.BLE_ADDRESS}) has been blocked by an administrator and disconnected from your account.`,
+        data: { device_id: device.device_id, BLE_ADDRESS: device.BLE_ADDRESS, status: "BLOCKED" },
+      });
+    }
+
+    res.status(200).json({ success: true, message: "Device blocked and force-unlinked successfully", data: device });
   } catch (error) {
     next(error);
   }
