@@ -89,6 +89,7 @@ const firmwareUpload = require("../middlewares/firmwareUpload");
 const apkUpload      = require("../middlewares/apkUpload");
 
 const {
+  getUploadUrl,
   createAppRelease,
   getAppReleases,
   updateAppRelease,
@@ -102,10 +103,11 @@ router.put("/firmware/:id",    authorize("ADMIN"), updateFirmwareRelease);
 router.delete("/firmware/:id", authorize("ADMIN"), deleteFirmwareRelease);
 
 // Mobile App APK Releases (Admin only - supports direct .apk upload to Cloudflare R2)
-router.post("/app-releases",       authorize("ADMIN"), apkUpload.single("apk_file"), createAppRelease);
-router.get("/app-releases",        authorize("ADMIN", "HELPER"), getAppReleases);
-router.put("/app-releases/:id",    authorize("ADMIN"), updateAppRelease);
-router.delete("/app-releases/:id", authorize("ADMIN"), deleteAppRelease);
+router.post("/app-releases/upload-url", authorize("ADMIN"), getUploadUrl);
+router.post("/app-releases",            authorize("ADMIN"), apkUpload.single("apk_file"), createAppRelease);
+router.get("/app-releases",             authorize("ADMIN", "HELPER"), getAppReleases);
+router.put("/app-releases/:id",         authorize("ADMIN"), updateAppRelease);
+router.delete("/app-releases/:id",      authorize("ADMIN"), deleteAppRelease);
 
 // Staff Notifications & Real-Time Alerts
 const {

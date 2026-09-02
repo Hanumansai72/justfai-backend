@@ -7,6 +7,33 @@ const audit        = require("../../security/auditLogger");
 const cloudflareR2 = require("../../services/cloudflareR2.service");
 
 // ─────────────────────────────────────────────
+// @desc    Get Presigned URL to upload APK directly to Cloudflare R2 (Bypasses Vercel 4.5MB payload limit)
+// @route   POST /api/admin/app-releases/upload-url
+// @access  Private/Admin
+// ─────────────────────────────────────────────
+exports.getUploadUrl = async (req, res, next) => {
+  try {
+    const { filename, content_type } = req.body;
+    if (!filename) {
+      return res.status(400).json({ success: false, message: "filename is required" });
+    }
+
+    const cleanFilename = filename.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const r2Key = `apk/${Date.now()}-${cleanFilename}`;
+    const contentType = content_type || "application/vnd.android.package-archive";
+
+    const presigned = await cloudflareR2.getUploadPresignedUrl(r2Key, contentType);
+
+    res.status(200).json({
+      success: true,
+      data: presigned,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ─────────────────────────────────────────────
 // @desc    Upload APK and publish new mobile app release
 // @route   POST /api/admin/app-releases
 // @access  Private/Admin

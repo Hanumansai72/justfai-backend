@@ -102,6 +102,35 @@ class CloudflareR2Service {
   }
 
   /**
+   * Generate a Presigned PUT URL for direct browser-to-R2 upload (Bypasses Vercel 4.5MB limit)
+   * @param {string} fileName Destination key (e.g. "apk/justride-v1.1.0-b2.apk")
+   * @param {string} contentType MIME type
+   * @param {number} expiresIn Seconds until expiration (default 15 minutes)
+   */
+  async getUploadPresignedUrl(fileName, contentType = "application/vnd.android.package-archive", expiresIn = 900) {
+    if (!this.isConfigured || !this.client) {
+      throw new Error("Cloudflare R2 is not configured");
+    }
+
+    const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
+
+    const command = new PutObjectCommand({
+      Bucket: this.bucketName,
+      Key: fileName,
+      ContentType: contentType,
+    });
+
+    const uploadUrl = await getSignedUrl(this.client, command, { expiresIn });
+    const publicUrl = `${this.publicDomain}/${fileName}`;
+
+    return {
+      uploadUrl,
+      publicUrl,
+      fileName,
+    };
+  }
+
+  /**
    * Delete firmware or APK binary from R2
    * @param {string} fileName Key to delete
    */
