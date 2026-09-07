@@ -152,3 +152,30 @@ exports.getImagePreview = async (req, res, next) => {
     next(error);
   }
 };
+
+// ─────────────────────────────────────────────
+// @desc    Delete custom display / uploaded image from Cloudinary
+// @route   DELETE /api/upload/image
+// @access  Private
+// ─────────────────────────────────────────────
+exports.deleteImage = async (req, res, next) => {
+  try {
+    const { public_id, url } = req.body || {};
+    let targetPublicId = public_id;
+    if (!targetPublicId && url && typeof url === "string") {
+      const match = url.match(/upload\/(?:v\d+\/)?([^\.]+)/);
+      if (match) targetPublicId = match[1];
+    }
+
+    if (targetPublicId) {
+      await cloudinaryService.deleteImage(targetPublicId).catch(() => null);
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Custom display image removed from cloud storage",
+    });
+  } catch (error) {
+    next(error);
+  }
+};

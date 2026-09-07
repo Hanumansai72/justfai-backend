@@ -7,6 +7,7 @@ const {
   uploadAvatar,
   uploadImage,
   getImagePreview,
+  deleteImage,
 } = require("../controllers/upload.controller");
 
 // All upload routes require authentication
@@ -39,6 +40,9 @@ router.post(
   upload.single("image"),
   uploadImage
 );
+
+// Delete custom display / generic image from cloud
+router.delete("/image", deleteImage);
 
 // Dynamic preview URL endpoint
 router.get("/preview", getImagePreview);
