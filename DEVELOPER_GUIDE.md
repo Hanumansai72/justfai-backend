@@ -84,6 +84,7 @@ c:\Hanumansai_Projects\Justride\Backend\
     │   ├── upload.controller.js        # File upload controller (Cloudinary/Disk)
     │   ├── userController.js           # Rider auth & profile controller
     │   ├── admin/                      # Admin & Staff portal operations
+    │   │   ├── appRelease.controller.js    # Mobile APK releases on Cloudflare R2 (See docs/APP_RELEASE_CONTROLLER_EXPLAINED.md)
     │   │   ├── audit.controller.js         # Audit log querying & forensic analytics
     │   │   ├── auth.controller.js          # Admin/Staff login & employee provisioning
     │   │   ├── dashboard.controller.js     # Fleet KPIs, revenue, status stats
@@ -307,7 +308,8 @@ Background task processing powered by **BullMQ**:
 | [`notificationRoutes.js`](file:///c:/Hanumansai_Projects/Justride/Backend/src/routes/notificationRoutes.js) | `/api/notifications`| User in-app notifications & mark-as-read. | [`notification.controller.js`](file:///c:/Hanumansai_Projects/Justride/Backend/src/controllers/notification.controller.js) |
 | [`supportRoutes.js`](file:///c:/Hanumansai_Projects/Justride/Backend/src/routes/supportRoutes.js) | `/api/support` | Rider support ticket creation & messaging. | [`support.controller.js`](file:///c:/Hanumansai_Projects/Justride/Backend/src/controllers/support.controller.js) |
 | [`uploadRoutes.js`](file:///c:/Hanumansai_Projects/Justride/Backend/src/routes/uploadRoutes.js) | `/api/upload` | File/image uploads for tickets & avatars. | [`upload.controller.js`](file:///c:/Hanumansai_Projects/Justride/Backend/src/controllers/upload.controller.js) |
-| [`adminRoutes.js`](file:///c:/Hanumansai_Projects/Justride/Backend/src/routes/adminRoutes.js) | `/api/admin` | Administrative portal endpoints (Staff, Fleet, OTA, Audit, Tickets). | [`controllers/admin/*`](file:///c:/Hanumansai_Projects/Justride/Backend/src/controllers/admin/) |
+| [`adminRoutes.js`](file:///c:/Hanumansai_Projects/Justride/Backend/src/routes/adminRoutes.js) | `/api/admin` | Administrative portal endpoints (Staff, Fleet, OTA, Audit, Tickets, APK releases). | [`controllers/admin/*`](file:///c:/Hanumansai_Projects/Justride/Backend/src/controllers/admin/) |
+| Public App Updates | `/api/app-releases` | Mobile app OTA update checking & direct Cloudflare R2 downloads. | [`appRelease.controller.js`](file:///c:/Hanumansai_Projects/Justride/Backend/src/controllers/admin/appRelease.controller.js) ([Line-by-Line Guide](file:///c:/Hanumansai_Projects/Justride/Backend/docs/APP_RELEASE_CONTROLLER_EXPLAINED.md)) |
 
 ---
 
