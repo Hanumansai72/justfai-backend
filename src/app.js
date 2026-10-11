@@ -41,41 +41,11 @@ app.use(
 // ─────────────────────────────────────────────────────────────
 // CORS — restrict to known origins in production
 // ─────────────────────────────────────────────────────────────
-const allowedOrigins = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(",").map((o) => o.trim())
-  : [
-      "http://localhost:3000",
-      "http://localhost:5173",
-      "http://localhost:8080",
-      "https://justride-admin.vercel.app",
-      "https://justrideadminpage.vercel.app",
-      "https://justride.io",
-      "https://www.justride.io",
-    ];
-
 app.use(
   cors({
-    origin: (origin, callback) => {
-      // Allow requests with no origin (like mobile apps, curl, Postman)
-      if (!origin) return callback(null, true);
-
-      // Local development origins are never trusted in production.
-      if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
-        if (process.env.NODE_ENV === "production") {
-          return callback(new Error(`CORS: Origin '${origin}' is not allowed`));
-        }
-        return callback(null, true);
-      }
-
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      } else {
-        callback(new Error(`CORS: Origin '${origin}' is not allowed`));
-      }
-    },
+    ...require('./config/cors'),
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "x-auth-token", "Accept", "Origin"],
-    credentials: true,
   })
 );
 

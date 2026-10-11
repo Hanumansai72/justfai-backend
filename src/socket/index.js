@@ -23,27 +23,10 @@ let io = null;
  * @param {import('http').Server} httpServer
  */
 const initSocket = (httpServer) => {
-  const allowedOrigins = process.env.ALLOWED_ORIGINS
-    ? process.env.ALLOWED_ORIGINS.split(",").map((o) => o.trim())
-    : ["http://localhost:3000", "http://localhost:5173", "http://localhost:8080"];
-
   io = new Server(httpServer, {
     cors: {
-      origin: (origin, callback) => {
-        if (!origin) return callback(null, true);
-        if (
-          process.env.NODE_ENV !== "production" &&
-          /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)
-        ) {
-          return callback(null, true);
-        }
-        if (allowedOrigins.includes(origin)) {
-          return callback(null, true);
-        }
-        return callback(new Error(`Socket CORS: Origin '${origin}' is not allowed`));
-      },
+      ...require('../config/cors'),
       methods: ["GET", "POST"],
-      credentials: true,
     },
     transports: ["websocket", "polling"],
     pingTimeout: 20000,
