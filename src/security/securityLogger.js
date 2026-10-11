@@ -9,6 +9,7 @@
  *   - Everything when AUDIT_ALL_REQUESTS=true (dev/debug)
  */
 const { log } = require("./auditLogger");
+const safeRequestPath = require('../utils/safeRequestPath');
 
 const SENSITIVE_PATHS = [
   "/api/users/login",
@@ -32,7 +33,7 @@ const securityLogger = (req, res, next) => {
 
   res.on("finish", () => {
     const { statusCode } = res;
-    const path = req.originalUrl;
+    const path = safeRequestPath(req);
     const duration = Date.now() - startedAt;
     const logAll = process.env.AUDIT_ALL_REQUESTS === "true";
 

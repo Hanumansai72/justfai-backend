@@ -6,6 +6,7 @@
  */
 const rateLimit = require("express-rate-limit");
 const { log } = require("./auditLogger");
+const safeRequestPath = require('../utils/safeRequestPath');
 
 /** Factory: builds a rate-limiter that audit-logs every blocked request */
 const createLimiter = ({ windowMs, max, message }) =>
@@ -21,8 +22,8 @@ const createLimiter = ({ windowMs, max, message }) =>
         category: "SECURITY",
         action: "RATE_LIMIT_HIT",
         status: "BLOCKED",
-        message: `Rate limit exceeded: ${req.method} ${req.originalUrl}`,
-        metadata: { url: req.originalUrl, method: req.method },
+        message: `Rate limit exceeded: ${req.method} ${safeRequestPath(req)}`,
+        metadata: { url: safeRequestPath(req), method: req.method },
       });
       res.status(429).json({ success: false, message });
     },

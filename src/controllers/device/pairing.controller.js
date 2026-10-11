@@ -10,6 +10,8 @@
 const Device = require("../../models/device.model");
 const audit  = require("../../security/auditLogger");
 const { sendNotification } = require("../notification.controller");
+const { sendEmail } = require('../../services/email.service');
+const { unlinkOtp } = require('../../services/email.templates');
 const {
   formatBleAddress,
   generateRandomCode,
@@ -284,6 +286,13 @@ exports.requestUnlinkOtp = async (req, res, next) => {
       { $set: { unlink_otp: hashString(otp), unlink_otp_expires: new Date(Date.now() + 10 * 60 * 1000) } }
     );
 
+    const delivery = await sendEmail({ to: req.user.email, ...unlinkOtp(req.user.name, otp) });
+    if (!delivery.sent) {
+      await Device.updateOne({ _id: device._id, unlink_otp: hashString(otp) },
+        { $unset: { unlink_otp: '', unlink_otp_expires: '' } });
+      return res.status(503).json({ success: false, message: 'Unable to send the code right now. Please try again later.' });
+    }
+
     await sendNotification({
       user_id: req.user._id,
       type: "SECURITY_ALERT",
@@ -295,7 +304,6 @@ exports.requestUnlinkOtp = async (req, res, next) => {
     res.status(200).json({
       success: true,
       message: "Unlink OTP generated and sent to registered contact (valid for 10 minutes)",
-      ...(process.env.NODE_ENV === "development" && { dev_otp: otp }),
       expires_in_seconds: 600,
     });
   } catch (error) {

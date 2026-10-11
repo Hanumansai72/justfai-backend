@@ -87,7 +87,8 @@ app.use(generalLimiter);
 // ─────────────────────────────────────────────────────────────
 // HTTP Logging
 // ─────────────────────────────────────────────────────────────
-app.use(morgan(process.env.NODE_ENV === "production" ? "combined" : "dev"));
+morgan.token('safe-url', require('./utils/safeRequestPath'));
+app.use(morgan(':method :safe-url :status :response-time ms'));
 
 // ─────────────────────────────────────────────────────────────
 // Body Parsing (10 kb limit to reject oversized payloads)

@@ -3,12 +3,16 @@ const validator = require('validator');
 const EarlyInterest = require('../models/EarlyInterest.model');
 const ApiResponse = require('../utils/apiResponse');
 const { protect, authorize } = require('../middlewares/authMiddleware');
+const rateLimit = require('express-rate-limit');
+const { sendEmail } = require('../services/email.service');
+const { interestConfirmation } = require('../services/email.templates');
 
 const router = express.Router();
 const intents = ['Yes', 'Maybe', 'I want to know the price first'];
 const optionalText = (value, max) => typeof value === 'string' && value.trim().length <= max;
 
-router.post('/', async (req, res, next) => {
+router.post('/', rateLimit({ windowMs: 60 * 60 * 1000, limit: 5, standardHeaders: 'draft-8', legacyHeaders: false,
+  message: { success: false, message: 'Too many submissions. Please try again later.' } }), async (req, res, next) => {
   try {
     const { name, email, city, purchaseIntent = '', notes = '', website = '' } = req.body || {};
     if (website) return ApiResponse.created(res, null, 'You are on the list');
@@ -23,7 +27,11 @@ router.post('/', async (req, res, next) => {
     if (await EarlyInterest.exists({ email: normalizedEmail })) {
       return ApiResponse.success(res, null, 'You are already on the list.');
     }
-    await EarlyInterest.create({ name: name.trim(), email: normalizedEmail, city: city.trim(), purchaseIntent, notes: notes.trim() });
+    const interest = await EarlyInterest.create({ name: name.trim(), email: normalizedEmail, city: city.trim(), purchaseIntent, notes: notes.trim() });
+    const delivery = await sendEmail({ to: normalizedEmail, ...interestConfirmation(name.trim()) });
+    try {
+      await EarlyInterest.updateOne({ _id: interest._id }, { $set: { confirmationEmailStatus: delivery.sent ? 'sent' : 'failed', confirmationEmailCode: delivery.code } });
+    } catch { console.warn('[email] STATUS_SAVE_FAILED'); }
     return ApiResponse.created(res, null, 'You are on the list.');
   } catch (error) {
     if (error.code === 11000) return ApiResponse.success(res, null, 'You are already on the list.');

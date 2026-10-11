@@ -1,6 +1,8 @@
 const User = require("../models/User");
 const { OAuth2Client } = require("google-auth-library");
 const audit = require("../security/auditLogger");
+const { sendEmail } = require('../services/email.service');
+const { passwordReset, accountConfirmation, passwordChanged } = require('../services/email.templates');
 const {
   generateAccessToken,
   generateRefreshToken,
@@ -223,6 +225,7 @@ exports.register = async (req, res, next) => {
     }
 
     const user = await User.create({ name, phonenumber, email, password, role: "USER" });
+    await sendEmail({ to: user.email, ...accountConfirmation(user.name) });
 
     audit.log({
       req,
@@ -587,7 +590,7 @@ exports.getAllUsers = async (req, res, next) => {
 exports.forgotPassword = async (req, res, next) => {
   try {
     const { email } = req.body;
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email: String(email).trim().toLowerCase() });
 
     // Anti-enumeration defense
     if (!user) {
@@ -598,14 +601,22 @@ exports.forgotPassword = async (req, res, next) => {
     }
 
     if (user.status && user.status !== "active") {
-      return res.status(403).json({
-        success: false,
-        message: `Account is ${user.status}. Password reset is disabled. Contact support.`,
+      return res.status(200).json({
+        success: true,
+        message: "If an account with that email exists, password reset instructions have been sent.",
       });
     }
 
     const resetToken = user.getResetPasswordToken();
     await user.save({ validateBeforeSave: false });
+    let delivery;
+    try { delivery = await sendEmail({ to: user.email, ...passwordReset(user.name, resetToken) }); }
+    catch { delivery = { sent: false }; console.warn('[email] RESET_TEMPLATE_FAILED'); }
+    if (!delivery.sent) {
+      // Do not invalidate a newer concurrent request's token.
+      await User.updateOne({ _id: user._id, password_reset_token: user.password_reset_token },
+        { $unset: { password_reset_token: '', password_reset_expires: '' } });
+    }
 
     audit.log({
       req,
@@ -620,10 +631,6 @@ exports.forgotPassword = async (req, res, next) => {
     res.status(200).json({
       success: true,
       message: "If an account with that email exists, password reset instructions have been sent.",
-      ...(process.env.NODE_ENV === "development" && {
-        dev_reset_token: resetToken,
-        dev_reset_url: `/api/users/reset-password/${resetToken}`,
-      }),
     });
   } catch (error) {
     next(error);
@@ -677,6 +684,7 @@ exports.resetPassword = async (req, res, next) => {
       message: `Password reset completed for: ${user.email}`,
     });
 
+    await sendEmail({ to: user.email, ...passwordChanged(user.name) });
     return await issueTokensAndRespond(res, user, 200, "Password reset successful. You are now logged in.");
   } catch (error) {
     next(error);

@@ -10,6 +10,8 @@ const earlyInterestSchema = new mongoose.Schema({
   interestReasons: [{ type: String }],
   purchaseIntent: { type: String },
   notes: { type: String, trim: true },
+  confirmationEmailStatus: { type: String, enum: ['pending', 'sent', 'failed'], default: 'pending' },
+  confirmationEmailCode: { type: String },
 }, { timestamps: true, versionKey: false });
 
 module.exports = mongoose.model('EarlyInterest', earlyInterestSchema);

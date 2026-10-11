@@ -1,0 +1,63 @@
+Current DNS Records
+	
+Name
+	
+Type
+	
+Value
+	
+TTL
+	
+Priority
+	
+Age
+	
+Comment
+	
+
+
+		MX	mx2.hostinger.com.	14400	10	14s	
+	
+
+
+		MX	mx1.hostinger.com.	14400	5	30s	
+	
+
+
+	_dmarc	TXT	v=DMARC1; p=none	3600		59s	
+	
+
+
+	hostingermail-c._domainkey	CNAME	hostingermail-c.dkim.mail.hostinger.com.	300		1m	
+	
+
+
+	hostingermail-b._domainkey	CNAME	hostingermail-b.dkim.mail.hostinger.com.	60		1m	
+	
+
+
+	hostingermail-a._domainkey	CNAME	hostingermail-a.dkim.mail.hostinger.com.	300		4m	
+	
+
+
+		TXT	v=spf1 include:_spf.mail.hostinger.com ~all	3600		6m	
+	
+
+
+		CAA	0 issue "pki.goog"	60		52m		
+
+
+		CAA	0 issue "sectigo.com"	60		52m		
+
+
+		CAA	0 issue "letsencrypt.org"	60		52m		
+
+
+	*	ALIAS	cname.vercel-dns-017.com.	60		52m	
+Vercel automatically manages this record. It may change without notice.
+	
+
+
+		ALIAS	2e907ac1df9ad7a2.vercel-dns-017.com	60		52m	
+Vercel automatically manages this record. It may change without notice.
+	
