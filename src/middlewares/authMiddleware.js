@@ -24,14 +24,19 @@ exports.protect = async (req, res, next) => {
     }
 
     // Verify token
-    const jwtSecret = process.env.JWT_SECRET || "708b76c65be1418610a3e1401a55eda940a5b3bc0e43cd4be5ddc673ad528db1";
+    const jwtSecret = process.env.JWT_SECRET;
+    if (!jwtSecret) throw new Error("JWT_SECRET must be configured");
     const decoded = jwt.verify(token, jwtSecret);
-    req.user = await User.findById(decoded.id);
+    req.user = await User.findById(decoded.id)
+      .select("role status status_reason name email employee_id")
+      .lean();
 
     // If not found in Users, check Helper (Customer Care Staff) collection
     if (!req.user) {
       const Helper = require("../models/Helper.model");
-      req.user = await Helper.findById(decoded.id);
+      req.user = await Helper.findById(decoded.id)
+        .select("role status status_reason name email employee_id")
+        .lean();
     }
 
     if (!req.user) {

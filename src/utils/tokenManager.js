@@ -3,7 +3,7 @@
  * Comprehensive JWT Access & Refresh Token Management.
  *
  * Implements:
- *   - Short-lived Access Tokens (15m)
+ *   - Access Tokens (30d, matching current mobile client behavior)
  *   - Long-lived Refresh Tokens (30d) with unique JTI
  *   - SHA-256 hashing of refresh tokens stored in DB (Zero-Plaintext-at-Rest)
  *   - Token Rotation with Automatic Reuse Detection (RFC 6749 / OAuth 2.0 BCP)
@@ -12,10 +12,14 @@
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
 
-const ACCESS_SECRET  = process.env.JWT_SECRET || "708b76c65be1418610a3e1401a55eda940a5b3bc0e43cd4be5ddc673ad528db1";
-const REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || "cb8fc7549b688b65cbcc1c10d27890f20bc8b1133f6ac5c6c7c5bb883b83ab14";
+const ACCESS_SECRET  = process.env.JWT_SECRET;
+const REFRESH_SECRET = process.env.JWT_REFRESH_SECRET;
 const ACCESS_EXPIRE  = process.env.JWT_EXPIRE || "30d";
 const REFRESH_EXPIRE = process.env.JWT_REFRESH_EXPIRE || "60d";
+
+if (!ACCESS_SECRET || !REFRESH_SECRET) {
+  throw new Error("JWT_SECRET and JWT_REFRESH_SECRET must be configured");
+}
 
 /** SHA-256 hash of a raw token string */
 const hashToken = (token) =>

@@ -11,38 +11,42 @@ if (process.env.NODE_ENV === "development" && process.env.ENABLE_CUSTOM_DNS === 
 }
 
 let cachedConnection = null;
+let connectionPromise = null;
 
 const connectDB = async () => {
   // If already connected (readyState 1), reuse existing connection
   if (cachedConnection && mongoose.connection.readyState === 1) {
     return cachedConnection;
   }
+  if (connectionPromise) return connectionPromise;
 
-  const mongoUri =
-    process.env.MONGO_URI ||
-    "mongodb+srv://hanumansai72_db_user:lLoWiMGYc1zz6FFC@cluster0.adldhhz.mongodb.net/justride?appName=Cluster0";
+  const mongoUri = process.env.MONGO_URI;
+  if (!mongoUri) throw new Error("MONGO_URI must be configured");
 
-  try {
-    const conn = await mongoose.connect(mongoUri, {
-      serverSelectionTimeoutMS: 10000,
-      connectTimeoutMS: 10000,
-      socketTimeoutMS: 45000,
-      maxPoolSize: 10,
+  connectionPromise = mongoose.connect(mongoUri, {
+    serverSelectionTimeoutMS: 10000,
+    connectTimeoutMS: 10000,
+    socketTimeoutMS: 45000,
+    maxPoolSize: 10,
+  })
+    .then((conn) => {
+      cachedConnection = conn;
+      console.log("MongoDB Connected Successfully");
+      console.log(`Host: ${conn.connection.host}`);
+      console.log(`Database: ${conn.connection.name}`);
+      return conn;
+    })
+    .catch((error) => {
+      console.error("MongoDB Connection Error:", error.message);
+      if (process.env.NODE_ENV !== "production") {
+        // Don't crash serverless container abruptly on temporary network glitch
+        console.warn("Retrying on next request...");
+      }
+      throw error;
+    }).finally(() => {
+      connectionPromise = null;
     });
-
-    cachedConnection = conn;
-    console.log("MongoDB Connected Successfully");
-    console.log(`Host: ${conn.connection.host}`);
-    console.log(`Database: ${conn.connection.name}`);
-    return conn;
-  } catch (error) {
-    console.error("MongoDB Connection Error:", error.message);
-    if (process.env.NODE_ENV !== "production") {
-      // Don't crash serverless container abruptly on temporary network glitch
-      console.warn("Retrying on next request...");
-    }
-    throw error;
-  }
+  return connectionPromise;
 };
 
 module.exports = connectDB;

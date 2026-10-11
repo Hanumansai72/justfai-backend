@@ -21,6 +21,7 @@ const supportRoutes = require("./routes/supportRoutes");
 const chatRoutes = require("./routes/chatRoutes");
 const uploadRoutes = require("./routes/uploadRoutes");
 const adminRoutes = require("./routes/adminRoutes");
+const earlyInterestRoutes = require("./routes/earlyInterestRoutes");
 
 const app = express();
 
@@ -48,6 +49,8 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS
       "http://localhost:8080",
       "https://justride-admin.vercel.app",
       "https://justrideadminpage.vercel.app",
+      "https://justride.io",
+      "https://www.justride.io",
     ];
 
 app.use(
@@ -56,26 +59,16 @@ app.use(
       // Allow requests with no origin (like mobile apps, curl, Postman)
       if (!origin) return callback(null, true);
 
-      // Wildcard origin support
-      if (allowedOrigins.includes("*")) {
-        return callback(null, true);
-      }
-
-      // Allow any localhost / 127.0.0.1 port
+      // Local development origins are never trusted in production.
       if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+        if (process.env.NODE_ENV === "production") {
+          return callback(new Error(`CORS: Origin '${origin}' is not allowed`));
+        }
         return callback(null, true);
       }
-
-      // Allow all JustRide and Vercel deployed frontends (*.vercel.app)
-      try {
-        const hostname = new URL(origin).hostname;
-        if (hostname.endsWith(".vercel.app") || hostname.endsWith("justride.io")) {
-          return callback(null, true);
-        }
-      } catch (e) {}
 
       if (allowedOrigins.includes(origin)) {
-        callback(null, true);
+        return callback(null, true);
       } else {
         callback(new Error(`CORS: Origin '${origin}' is not allowed`));
       }
@@ -154,6 +147,7 @@ app.use("/api/support", supportRoutes);
 app.use("/api/chat", chatRoutes);
 app.use("/api/upload", uploadRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/early-interest", earlyInterestRoutes);
 
 // ─────────────────────────────────────────────────────────────
 // 404 Handler
