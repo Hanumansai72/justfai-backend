@@ -40,7 +40,8 @@ Ambiguous sends are not automatically retried to prevent duplicate email.
 Password reset, device unlink OTP, account creation and password reset completion use this
 same service. Failed reset/OTP delivery clears only that request's matching token/code.
 Reset replies are generic to avoid account enumeration; OTP failures return a safe error.
-Reset links use a URL fragment and the customer `/reset-password` page posts the token in JSON.
+Reset email links use a URL fragment. The customer reset page was removed at the user's
+request; the web reset journey is deferred until an approved reset interface is available.
 Existing token-in-path API clients remain supported, but application request logs redact them.
 
 Limits: existing auth/OTP IP protection; interest submissions 5/IP/hour; shared MongoDB
@@ -57,9 +58,13 @@ DNS is hosted in Vercel, not Hostinger. `email-dns-before.txt` records the origi
 The missing email records were added in Vercel on October 11, 2026. Hostinger then
 showed green checks for MX, SPF, DKIM and DMARC. `email-dns-after.txt` records the
 resulting zone. This verifies provider DNS detection, not received-message authentication.
-The public SMTP settings have also been saved to the backend Vercel project's Production
-environment. `MAIL_PASSWORD` remains to be added privately; a deployment is needed for
-environment changes to take effect. No real test email has been sent or received yet.
+All SMTP settings have been saved to the backend Vercel project's Production environment;
+`MAIL_PASSWORD` is an unrevealable Secret and is also stored in the ignored local `.env`.
+Backend commit `7141c03` deployed successfully. The local SMTP test was received in the
+approved `info@justride.cc` inbox on October 11, 2026. Its original message shows SPF,
+DKIM and DMARC passing, aligned to `justride.cc`, and contains HTML and plain text parts.
+The production early-interest request returned 201 and its database record shows
+`confirmationEmailStatus: sent`, `confirmationEmailCode: SENT`.
 
 Required records observed:
 
