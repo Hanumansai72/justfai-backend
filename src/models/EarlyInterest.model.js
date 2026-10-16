@@ -6,6 +6,9 @@ const earlyInterestSchema = new mongoose.Schema({
   city: { type: String, required: true, trim: true },
   purchaseIntent: { type: String },
   notes: { type: String, trim: true },
+  emailConsent: { type: Boolean, default: false },
+  emailConsentAt: { type: Date },
+  emailConsentText: { type: String },
   confirmationEmailStatus: { type: String, enum: ['pending', 'sent', 'failed'], default: 'pending' },
   confirmationEmailCode: { type: String },
 }, { timestamps: true, versionKey: false });

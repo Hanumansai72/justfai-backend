@@ -1,7 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const EmailLimit = require('../src/models/EmailLimit.model');
-const { sendEmail } = require('../src/services/email.service');
+const { sendEmail, sendInterestUpdate } = require('../src/services/email.service');
 const templates = require('../src/services/email.templates');
 const nodemailer = require('nodemailer');
 
@@ -28,13 +28,14 @@ test('Hostinger payload, safe failures, throttling and save-before-send', async 
   });
   const warnings = [];
   t.mock.method(console, 'warn', (message) => warnings.push(message));
-  const email = { to: 'rider@example.com', ...templates.interestConfirmation('<rider>') };
+  const email = { to: 'rider@example.com', ...templates.interestConfirmation('<rider>', true) };
   assert.deepEqual(await sendEmail(email), { sent: true, code: 'SENT' });
   assert.deepEqual(payload.from, { name: 'JustRide', address: 'info@justride.cc' });
   assert.equal(payload.replyTo, 'info@justride.cc');
   assert.equal(payload.to, 'rider@example.com');
   assert.ok(payload.html.includes('&lt;rider&gt;'));
   assert.ok(payload.text.includes('early access'));
+  assert.ok(templates.interestConfirmation('Rider').text.includes('not subscribed'));
   request.mock.mockImplementation(async () => { throw Object.assign(new Error('test-only-secret'), { code: 'EAUTH' }); });
   assert.equal((await sendEmail(email)).code, 'AUTH_FAILED');
   request.mock.mockImplementation(async () => { throw Object.assign(new Error('test-only-secret'), { responseCode: 452 }); });
@@ -52,8 +53,16 @@ test('Hostinger payload, safe failures, throttling and save-before-send', async 
   const EarlyInterest = require('../src/models/EarlyInterest.model');
   let saved = false;
   let updated = false;
-  t.mock.method(EarlyInterest, 'exists', async () => saved);
-  t.mock.method(EarlyInterest, 'create', async () => { saved = true; return { _id: 'test' }; });
+  const records = new Map();
+  const exists = t.mock.method(EarlyInterest, 'exists', async (query) => {
+    const record = records.get(query.email);
+    return query.emailConsent === true ? record?.emailConsent === true : Boolean(record);
+  });
+  t.mock.method(EarlyInterest, 'create', async (record) => {
+    records.set(record.email, record);
+    saved = true;
+    return { _id: 'test' };
+  });
   t.mock.method(EarlyInterest, 'updateOne', async (_, update) => { updated = true; assert.equal(update.$set.confirmationEmailStatus, 'failed'); });
   const service = require('../src/services/email.service');
   t.mock.method(service, 'sendEmail', async () => { assert.ok(saved); return { sent: false, code: 'TIMEOUT' }; });
@@ -70,12 +79,31 @@ test('Hostinger payload, safe failures, throttling and save-before-send', async 
   const server = app.listen(0, '127.0.0.1');
   await new Promise(resolve => server.once('listening', resolve));
   t.after(() => new Promise(resolve => server.close(resolve)));
-  const submit = () => httpFetch(`http://127.0.0.1:${server.address().port}/`, {
+  const submit = (fields = {}) => httpFetch(`http://127.0.0.1:${server.address().port}/`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: 'Rider', email: 'rider@example.com', city: 'Hyderabad' }),
+    body: JSON.stringify({ name: 'Rider', email: 'rider@example.com', city: 'Hyderabad', ...fields }),
   });
+  assert.equal((await submit({ emailConsent: 'false' })).status, 400);
   assert.equal((await submit()).status, 201);
   assert.ok(saved && updated);
-  assert.equal((await submit()).status, 200);
+  assert.equal(records.get('rider@example.com').emailConsent, false);
+  assert.equal(records.get('rider@example.com').emailConsentAt, undefined);
+  assert.equal((await submit({ emailConsent: true })).status, 200);
+  assert.equal(records.get('rider@example.com').emailConsent, false); // Duplicates cannot change another person's consent.
   assert.equal(service.sendEmail.mock.callCount(), 1);
+  assert.equal((await submit({ email: 'subscriber@example.com', emailConsent: true, emailConsentAt: 'untrusted' })).status, 201);
+  const subscriber = records.get('subscriber@example.com');
+  assert.ok(subscriber.emailConsentAt instanceof Date);
+  assert.ok(subscriber.emailConsentText.startsWith('I agree to receive future JustRide emails'));
+
+  claim.mock.mockImplementation(async () => ({}));
+  request.mock.mockImplementation(async (message) => ({ accepted: [message.to] }));
+  const sendCount = request.mock.callCount();
+  assert.equal((await sendInterestUpdate(email)).code, 'CONSENT_REQUIRED');
+  assert.equal(request.mock.callCount(), sendCount);
+  assert.equal((await sendInterestUpdate({ ...email, to: 'subscriber@example.com' })).code, 'SENT');
+  assert.equal(request.mock.callCount(), sendCount + 1);
+  exists.mock.mockImplementation(async () => { throw new Error('database unavailable'); });
+  assert.equal((await sendInterestUpdate(email)).code, 'CONSENT_CHECK_FAILED');
+  assert.equal(request.mock.callCount(), sendCount + 1);
 });

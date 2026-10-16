@@ -7,9 +7,11 @@ function message(subject, paragraphs, action) {
 }
 
 const firstName = (name) => String(name || 'rider').trim().split(/\s+/)[0];
-const interestConfirmation = (name) => message('Thanks for your interest in JustRide', [
+const interestConfirmation = (name, emailConsent = false) => message('Thanks for your interest in JustRide', [
   `Hi ${firstName(name)},`, "Thanks for joining the JustRide interest list. We’re glad to have you along for the ride.",
-  'We’ll keep you informed about product progress, early access and availability as details are confirmed.',
+  emailConsent
+    ? 'You opted in to future JustRide emails about product progress, early access and preorder availability.'
+    : 'Your interest has been recorded. You have not subscribed to future JustRide update emails.',
   'Keep your eyes on the ride. — The JustRide team',
 ], { label: 'Explore JustRide', url: 'https://www.justride.cc' });
 

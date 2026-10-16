@@ -2,6 +2,7 @@ const { createHash } = require('node:crypto');
 const validator = require('validator');
 const nodemailer = require('nodemailer');
 const EmailLimit = require('../models/EmailLimit.model');
+const EarlyInterest = require('../models/EarlyInterest.model');
 
 // Database counters survive restarts and are shared by Vercel instances.
 async function claim(key, windowMs, max) {
@@ -67,4 +68,17 @@ async function sendEmail({ to, subject, html, text }) {
   // Do not automatically retry an ambiguous timeout: the provider may have sent it.
 }
 
-module.exports = { sendEmail };
+// Future product/preorder updates must check the saved choice before each send.
+// Confirmation, OTP and account-security emails continue through sendEmail.
+async function sendInterestUpdate(message) {
+  if (typeof message.to !== 'string') return failure('INVALID_MESSAGE');
+  const to = message.to.trim().toLowerCase();
+  try {
+    if (!await EarlyInterest.exists({ email: to, emailConsent: true })) return failure('CONSENT_REQUIRED');
+  } catch {
+    return failure('CONSENT_CHECK_FAILED');
+  }
+  return sendEmail({ ...message, to });
+}
+
+module.exports = { sendEmail, sendInterestUpdate };

@@ -34,6 +34,14 @@ Acceptance does not prove inbox delivery; verify the real test in Webmail and in
 Interest confirmations are attempted only after the record is saved. Duplicate submissions
 never resend. Delivery status and safe failure codes are recorded on the interest record and
 shown on the admin Interested Users page. A failed confirmation leaves the record intact.
+The optional future-email checkbox defaults to unchecked. New records save `emailConsent`
+as a strict boolean; opted-in records also save the server timestamp and displayed wording
+in `emailConsentAt` and `emailConsentText`. Older records without consent are not opted in.
+Duplicate public submissions do not change saved consent. Future product/preorder messages
+must use `sendInterestUpdate({to, subject, html, text})`, which checks saved consent before
+calling the same SMTP service. Missing consent or a failed database lookup prevents sending.
+This change does not start a campaign or send any future update emails. Submission
+confirmations remain transactional and accurately describe the subscriber's saved choice.
 The request awaits delivery, including on Vercel: no fire-and-forget work after the response.
 Ambiguous sends are not automatically retried to prevent duplicate email.
 
