@@ -2,6 +2,10 @@
 
 Date: 17 October 2026. Status: implemented and verified as described below; prepared for GitHub publication at the user's request. Deployment verification, physical device and production load certification remain outstanding.
 
+Cleanup: JavaScript test files and their npm command were subsequently removed at the
+user's explicit request. JavaScript test results below are historical results from before
+removal; the suite is no longer included. Mobile Dart tests were not removed.
+
 Follow-up: confirmation emails now use a MongoDB outbox and Vercel `waitUntil` rather
 than blocking submission completion. New records save as `queued`; duplicate email
 submissions do not create another queue entry. A persistent Node worker and subsequent
@@ -97,9 +101,9 @@ Both homepage device images loaded successfully from the 480px WebP sources in t
 
 | Check | Result and limits |
 |---|---|
-| `npm test` backend | 48 passed, 0 failed after queue and required-consent follow-ups; live Redis case skipped in normal suite |
-| Opt-in `RUN_REDIS_TESTS=true node --test test/rate-limit-redis.integration.test.js` | Passed against configured Redis: 8 concurrent operations through two independent clients allow exactly 3; 200ms window expires. Random `rl:test:` keys expire automatically |
-| Staff `node --test test/client.test.mjs` | 3 passed: duplicate GETs, 429 preserving session/no replay, AbortSignal forwarding |
+| Backend JavaScript suite (subsequently removed) | 48 passed, 0 failed after queue and required-consent follow-ups; live Redis case skipped in normal suite |
+| Opt-in live Redis check (subsequently removed) | Passed against configured Redis: 8 concurrent operations through two independent clients allow exactly 3; 200ms window expires. Random `rl:test:` keys expire automatically |
+| Staff client checks (subsequently removed) | 3 passed: duplicate GETs, 429 preserving session/no replay, AbortSignal forwarding |
 | Existing Flutter suite | 83 tests passed, including existing GPS/navigation/ride-related unit/widget coverage |
 | New Flutter test file | 4 passed: Retry-After/auth, transient classification, cached 429 remains failure, concurrent device read coalescing |
 | Customer production build | Passed, 1,838 modules; 10.64 seconds in this run |
@@ -132,7 +136,7 @@ Paths in this section are relative to the named repository. Other dirty mobile/f
 | Files | Reason |
 |---|---|
 | `package.json` | Enable actual Node test command |
-| `src/models/EarlyInterest.model.js`, `test/interest-price.test.js` | Persist and validate optional price ranges; test supported values and older clients |
+| `src/models/EarlyInterest.model.js` | Persist and validate optional price ranges; regression checks were subsequently removed |
 | `src/security/rateLimitPolicies.js`, `rateLimitStore.js`, `rateLimiter.js` | Policies, atomic shared storage, identities, errors and counters |
 | `src/app.js` | Trusted proxy configuration, secondary ceiling, catalog reads, exposed headers |
 | `src/routes/userRoutes.js`, `adminRoutes.js`, `deviceRoutes.js`, `earlyInterestRoutes.js`, `chatRoutes.js`, `notificationRoutes.js`, `savedAddressRoutes.js`, `supportRoutes.js`, `uploadRoutes.js` | Attach category/action budgets after auth and before uploads |
@@ -143,8 +147,7 @@ Paths in this section are relative to the named repository. Other dirty mobile/f
 | `src/controllers/upload.controller.js`, `src/services/cloudinary.service.js` | Upload ownership/dimension restrictions; propagate provider deletion failure |
 | `src/config/seedAdmin.js`, `src/utils/deviceCrypto.js` | Explicit secure bootstrap and cryptographic OTP/HMAC configuration |
 | `src/middlewares/errorHandler.js`, `src/security/auditLogger.js` | Redacted error logs and trusted IP use |
-| `test/rate-limit.test.js`, `rate-limit-redis.integration.test.js`, `security-regressions.test.js`, `socket-rate-limit.test.js` | New rate/security regressions |
-| `test/interest-admin.test.js` | Give authenticated fixture a verified staff ID |
+| JavaScript regression fixtures (subsequently removed) | Verified rates, security, queueing, consent, price ranges and staff access before cleanup |
 | `scripts/api-inventory.js`, `docs/api-inventory.md`, `docs/api-inventory.json` | Reproducible inventory |
 | `docs/engineering-report.md`, `docs/flutter-analysis.txt`, `docs/interest-429.png` | Report and validation evidence |
 
@@ -162,7 +165,7 @@ Paths in this section are relative to the named repository. Other dirty mobile/f
 - `src/api/client.js`: concurrent GET coalescing, cancellation forwarding, retry metadata.
 - `src/pages/admin/AdminDashboard.jsx`: role-aware/visible polling and rejected-request error display.
 - `src/pages/admin/InterestedUsers.jsx`: show the customer's preferred price range.
-- `test/client.test.mjs`: no-dependency client regressions.
+- Staff JavaScript client regressions were verified and subsequently removed.
 
 ### Mobile
 

@@ -119,11 +119,10 @@ Check for existing records immediately before editing. Preserve website/CAA reco
 merge any existing SPF and retain an existing DMARC policy. Never change nameservers.
 Do not claim SPF/DKIM/DMARC passing until verified by provider or received-message headers.
 
-Run `node --test test/email.test.js` for provider payload, secret-free failures, throttling,
-HTML escaping, save-before-queue and duplicate suppression without sending real mail.
-Run `node --test test/interest-email-queue.test.js` for immediate HTTP completion while SMTP
-is blocked, concurrent duplicate insert protection, atomic worker claims, safe quota delays
-and no automatic resend after ambiguous delivery.
+The JavaScript test files and their npm command were removed at the user's request.
+Earlier validation covered provider payloads, throttling, HTML escaping, save-before-queue,
+duplicate suppression, nonblocking HTTP responses, worker claims and ambiguous delivery.
+Those recorded results describe checks executed before removal, not a currently available suite.
 
 Background lifetime reference: [Vercel waitUntil](https://vercel.com/docs/functions/functions-api-reference/vercel-functions-package#waituntil).
 
