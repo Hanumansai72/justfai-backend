@@ -180,6 +180,10 @@ npm start
 
 ---
 
+## Admin lists
+
+Admin list endpoints default to 10 records and cap requested page sizes at 10. Lists use newest-first ordering with an ID tie-breaker; pairing history uses the pairing date. Interested Users also returns 10 per page. Staff totals cover the full filtered directory, and notification categories are filtered before pagination.
+
 ## Admin audit trail
 
 - Records staff login success/failure, blocked login, authenticated admin API reads and changes, and explicit logout. Controller events are kept once per request; uncovered operations receive an HTTP action record.

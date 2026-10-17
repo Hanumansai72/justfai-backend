@@ -389,6 +389,8 @@ exports.createHelperUser = async (req, res, next) => {
 // ─────────────────────────────────────────────
 exports.getHelperUsers = async (req, res, next) => {
   try {
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.max(1, Math.min(10, parseInt(req.query.limit, 10) || 10));
     const filter = {};
     if (req.query.role)   filter.role   = req.query.role.toUpperCase();
     if (req.query.status) filter.status = req.query.status;
@@ -397,14 +399,24 @@ exports.getHelperUsers = async (req, res, next) => {
       filter.$or = [{ name: rx }, { email: rx }, { employee_id: rx }, { username: rx }];
     }
 
-    const helpers = await Helper.find(filter)
-      .populate("created_by", "name email")
-      .sort({ createdAt: -1 })
-      .lean();
+    const status = { $toUpper: { $ifNull: ['$status', 'active'] } };
+    const [helpers, totals] = await Promise.all([
+      Helper.find(filter).populate('created_by', 'name email')
+        .sort({ createdAt: -1, _id: -1 }).skip((page - 1) * limit).limit(limit).lean(),
+      Helper.aggregate([{ $match: filter }, { $group: { _id: null, total: { $sum: 1 },
+        active: { $sum: { $cond: [{ $eq: [status, 'ACTIVE'] }, 1, 0] } },
+        onLeave: { $sum: { $cond: [{ $eq: [status, 'ON_LEAVE'] }, 1, 0] } },
+        suspended: { $sum: { $cond: [{ $in: [status, ['SUSPENDED', 'TERMINATED']] }, 1, 0] } },
+        resolved: { $sum: { $ifNull: ['$resolved_tickets_count', 0] } },
+      } }]),
+    ]);
+    const stats = totals[0] || { total: 0, active: 0, onLeave: 0, suspended: 0, resolved: 0 };
 
     res.status(200).json({
       success: true,
       count: helpers.length,
+      pagination: { total: stats.total, page, limit, pages: Math.ceil(stats.total / limit) },
+      stats,
       data: helpers,
     });
   } catch (error) {

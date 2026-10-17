@@ -235,8 +235,10 @@ exports.createAppRelease = async (req, res, next) => {
  */
 exports.getAppReleases = async (req, res, next) => {
   try {
-    // 1. Extract query parameters with default pagination (page 1, 20 items per page)
-    const { platform, channel, is_active, page = 1, limit = 20 } = req.query;
+    // 1. Extract query parameters with default pagination (page 1, 10 items per page)
+    const { platform, channel, is_active } = req.query;
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.max(1, Math.min(10, parseInt(req.query.limit, 10) || 10));
     const filter = {};
 
     // 2. Build dynamic MongoDB filter based on which query params were provided
@@ -245,9 +247,9 @@ exports.getAppReleases = async (req, res, next) => {
     if (is_active !== undefined) filter.is_active = is_active === "true";
 
     // 3. Pagination Math: Calculate how many documents to skip
-    //    Example: Page 1 -> skip 0; Page 2 -> skip 20
+    //    Example: Page 1 -> skip 0; Page 2 -> skip 10
     //    Math.max(1, ...) ensures user cannot pass negative page numbers
-    const skip = (Math.max(1, Number(page)) - 1) * Number(limit);
+    const skip = (page - 1) * limit;
 
     // 4. Performance Optimization: Run count and find queries IN PARALLEL with Promise.all
     const [total, releases] = await Promise.all([
@@ -258,12 +260,12 @@ exports.getAppReleases = async (req, res, next) => {
       AppRelease.find(filter)
         // Populate author information (like an SQL JOIN on the User model)
         .populate("released_by", "full_name email")
-        // Sort newest first: highest build number and newest release date
-        .sort({ build_number: -1, release_date: -1 })
+        // Show the newest uploaded releases first in the admin list.
+        .sort({ createdAt: -1, _id: -1 })
         // Skip previous pages
         .skip(skip)
         // Limit to requested page size
-        .limit(Number(limit))
+        .limit(limit)
         // .lean() returns plain JS objects (3-5x faster, less memory)
         .lean(),
     ]);
@@ -272,10 +274,10 @@ exports.getAppReleases = async (req, res, next) => {
     res.status(200).json({
       success: true,
       total,
-      page: Number(page),
-      limit: Number(limit),
+      page,
+      limit,
       // Math.ceil rounds up (e.g. 21 items / 20 per page = 2 pages)
-      totalPages: Math.ceil(total / Number(limit)),
+      totalPages: Math.ceil(total / limit),
       data: releases,
     });
   } catch (error) {

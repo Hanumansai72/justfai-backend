@@ -74,13 +74,13 @@ exports.registerDevice = async (req, res, next) => {
 
 // ─────────────────────────────────────────────
 // @desc    List all devices with filters + pagination
-// @route   GET /api/admin/devices?page=1&limit=20&is_paired=true&is_blocked=false&search=DEV-
+// @route   GET /api/admin/devices?page=1&limit=10&is_paired=true&is_blocked=false&search=DEV-
 // @access  Private/Admin
 // ─────────────────────────────────────────────
 exports.getDevices = async (req, res, next) => {
   try {
     const page  = Math.max(1, parseInt(req.query.page,  10) || 1);
-    const limit = Math.min(100, parseInt(req.query.limit, 10) || 20);
+    const limit = Math.max(1, Math.min(10, parseInt(req.query.limit, 10) || 10));
     const skip  = (page - 1) * limit;
 
     const filter = {};
@@ -101,7 +101,7 @@ exports.getDevices = async (req, res, next) => {
         .populate("linked_to",  "name email")
         .populate("blocked_by", "name email")
         .populate("retired_by", "name email")
-        .sort({ createdAt: -1 })
+        .sort({ createdAt: -1, _id: -1 })
         .skip(skip)
         .limit(limit)
         .lean(),

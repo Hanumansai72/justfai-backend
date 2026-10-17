@@ -12,13 +12,13 @@ const audit  = require("../../security/auditLogger");
 
 // ─────────────────────────────────────────────
 // @desc    Get active pairing requests / paired devices log
-// @route   GET /api/admin/pairing?page=1&limit=20&since=2024-01-01
+// @route   GET /api/admin/pairing?page=1&limit=10&since=2024-01-01
 // @access  Private/Admin
 // ─────────────────────────────────────────────
 exports.getPairingRequests = async (req, res, next) => {
   try {
     const page  = Math.max(1, parseInt(req.query.page,  10) || 1);
-    const limit = Math.min(100, parseInt(req.query.limit, 10) || 20);
+    const limit = Math.max(1, Math.min(10, parseInt(req.query.limit, 10) || 10));
     const skip  = (page - 1) * limit;
 
     // Optional date range filter
@@ -40,7 +40,7 @@ exports.getPairingRequests = async (req, res, next) => {
       Device.find(filter)
         .select("devicename device_id BLE_ADDRESS linked_to linked_date no_of_connection firmware_version is_blocked")
         .populate("linked_to", "name email phonenumber")
-        .sort({ linked_date: -1 })
+        .sort({ linked_date: -1, _id: -1 })
         .skip(skip)
         .limit(limit)
         .lean(),

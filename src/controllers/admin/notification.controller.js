@@ -19,7 +19,7 @@ exports.getStaffNotifications = async (req, res, next) => {
   try {
     const isSuperAdmin = req.user.role === "ADMIN";
     const page  = Math.max(1, parseInt(req.query.page,  10) || 1);
-    const limit = Math.min(50, parseInt(req.query.limit, 10) || 20);
+    const limit = Math.max(1, Math.min(10, parseInt(req.query.limit, 10) || 10));
     const skip  = (page - 1) * limit;
 
     // Build audience routing query:
@@ -56,9 +56,21 @@ exports.getStaffNotifications = async (req, res, next) => {
       ];
     }
 
+    // Apply the portal's existing category rules before pagination.
+    const critical = /CRITICAL|ALERT|BLOCK/i;
+    const warning = /WARN|BATTERY|DISCONNECT/i;
+    const success = /SUCCESS|FIRMWARE|RESOLVED/i;
+    const categories = {
+      CRITICAL: [{ type: critical }],
+      WARNING: [{ type: warning }, { type: { $not: critical } }],
+      SUCCESS: [{ type: success }, { type: { $not: critical } }, { type: { $not: warning } }],
+      STAFF: [{ type: { $not: /CRITICAL|ALERT|BLOCK|WARN|BATTERY|DISCONNECT|SUCCESS|FIRMWARE|RESOLVED/i } }],
+    };
+    if (Object.hasOwn(categories, req.query.category)) (query.$and ||= []).push(...categories[req.query.category]);
+
     const [notifications, total] = await Promise.all([
       Notification.find(query)
-        .sort({ createdAt: -1 })
+        .sort({ createdAt: -1, _id: -1 })
         .skip(skip)
         .limit(limit)
         .lean(),

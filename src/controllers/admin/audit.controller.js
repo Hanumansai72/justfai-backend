@@ -40,7 +40,7 @@ const actorFields = (log) => {
 exports.getAuditLogs = async (req, res, next) => {
   try {
     const page  = Math.max(1, parseInt(req.query.page, 10) || 1);
-    const limit = Math.max(1, Math.min(100, parseInt(req.query.limit, 10) || 20));
+    const limit = Math.max(1, Math.min(10, parseInt(req.query.limit, 10) || 10));
     const skip  = (page - 1) * limit;
 
     const filter = req.query.scope === 'admin' ? { $and: [adminScope()] } : {};

@@ -88,13 +88,13 @@ exports.createFirmwareRelease = async (req, res, next) => {
 
 // ─────────────────────────────────────────────
 // @desc    List firmware releases with filters + pagination
-// @route   GET /api/admin/firmware?channel=stable&is_active=true&page=1&limit=20
+// @route   GET /api/admin/firmware?channel=stable&is_active=true&page=1&limit=10
 // @access  Private/Admin
 // ─────────────────────────────────────────────
 exports.getFirmwareReleases = async (req, res, next) => {
   try {
     const page  = Math.max(1, parseInt(req.query.page,  10) || 1);
-    const limit = Math.min(100, parseInt(req.query.limit, 10) || 20);
+    const limit = Math.max(1, Math.min(10, parseInt(req.query.limit, 10) || 10));
     const skip  = (page - 1) * limit;
 
     const filter = {};
@@ -109,7 +109,7 @@ exports.getFirmwareReleases = async (req, res, next) => {
       FirmwareRelease.countDocuments(filter),
       FirmwareRelease.find(filter)
         .populate("released_by", "name email")
-        .sort({ release_date: -1 })
+        .sort({ createdAt: -1, _id: -1 })
         .skip(skip)
         .limit(limit)
         .lean(),

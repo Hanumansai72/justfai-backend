@@ -47,9 +47,9 @@ router.post('/', interestLimiter, async (req, res, next) => {
 router.get('/', protect, authorize('ADMIN', 'HELPER'), adminReadLimiter, async (req, res, next) => {
   try {
     const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
-    const limit = 100;
+    const limit = 10;
     const [items, total] = await Promise.all([
-      EarlyInterest.find().sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean(),
+      EarlyInterest.find().sort({ createdAt: -1, _id: -1 }).skip((page - 1) * limit).limit(limit).lean(),
       EarlyInterest.countDocuments(),
     ]);
     scheduleInterestEmails(res);
