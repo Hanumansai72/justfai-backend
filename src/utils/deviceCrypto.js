@@ -10,7 +10,7 @@
 const crypto = require("crypto");
 const mongoose = require("mongoose");
 
-const DEVICE_SECRET = process.env.DEVICE_SECRET || "justride_secure_device_secret_2026";
+const DEVICE_SECRET = process.env.DEVICE_SECRET;
 
 /** Normalise BLE address to uppercase trimmed string */
 const formatBleAddress = (ble) => (ble ? ble.trim().toUpperCase() : null);
@@ -21,7 +21,7 @@ const generateRandomCode = (length = 6) =>
 
 /** 6-digit numeric OTP */
 const generateNumericOtp = () =>
-  Math.floor(100000 + Math.random() * 900000).toString();
+  crypto.randomInt(100000, 1000000).toString();
 
 /** SHA-256 hash — for OTP / pairing code storage */
 const hashString = (value) =>
@@ -33,6 +33,7 @@ const hashString = (value) =>
  */
 const generateDeviceHash = (bleAddress, randomCode, customSecret = null) => {
   const secretKey = customSecret || DEVICE_SECRET;
+  if (!secretKey) throw new Error('A device secret must be configured');
   return crypto
     .createHmac("sha256", secretKey)
     .update(`${formatBleAddress(bleAddress)}:${randomCode}`)

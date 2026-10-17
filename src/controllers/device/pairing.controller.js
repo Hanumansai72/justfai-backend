@@ -51,7 +51,7 @@ exports.checkDeviceAccess = async (req, res, next) => {
      */
     const [device, userCurrentDevice] = await Promise.all([
       Device.findOne({ $or: orConditions })
-        .select("devicename device_id BLE_ADDRESS device_version firmware_version is_paired is_active linked_to")
+        .select("devicename device_id BLE_ADDRESS device_version firmware_version is_paired is_active is_blocked is_retired linked_to")
         .lean(),
       Device.findOne({ linked_to: req.user._id, is_paired: true })
         .select("devicename device_id BLE_ADDRESS")
@@ -327,11 +327,11 @@ exports.unlinkDevice = async (req, res, next) => {
     }
 
     // One query — load with hidden security fields included
-    const device = await findDeviceByIdentifier(Device, identifier, "+pairing_code +unlink_otp");
+    const device = await findDeviceByIdentifier(Device, identifier, "+pairing_code +unlink_otp +device_secret");
 
     if (!device)                        return res.status(404).json({ success: false, message: "Device not found" });
     if (!device.is_paired)              return res.status(400).json({ success: false, message: "Device is not paired" });
-    if (device.linked_to.toString() !== req.user._id.toString())
+    if (!device.linked_to || device.linked_to.toString() !== req.user._id.toString())
       return res.status(403).json({ success: false, message: "Not authorized to unlink this device" });
 
     // ── Cryptographic verification ──────────────────────────────
@@ -342,8 +342,9 @@ exports.unlinkDevice = async (req, res, next) => {
       isHashValid = safeCompare(device.device_hash, device_hash);
 
     if (pairing_code && device.BLE_ADDRESS) {
-      if (safeCompare(device.device_hash, generateDeviceHash(device.BLE_ADDRESS, pairing_code))) isHashValid = true;
       if (device.pairing_code && safeCompare(device.pairing_code, hashString(pairing_code)))     isHashValid = true;
+      const secret = device.device_secret || process.env.DEVICE_SECRET;
+      if (secret && safeCompare(device.device_hash, generateDeviceHash(device.BLE_ADDRESS, pairing_code, secret))) isHashValid = true;
     }
 
     if (otp_code && device.unlink_otp) {
@@ -362,13 +363,15 @@ exports.unlinkDevice = async (req, res, next) => {
      * OPTIMISATION: single atomic $set + $unset operation.
      * No need to load the full document, mutate fields, then save.
      */
-    await Device.updateOne(
-      { _id: device._id },
+    const result = await Device.updateOne(
+      { _id: device._id, linked_to: req.user._id, device_hash: device.device_hash },
       {
         $set:   { is_paired: false, linked_to: null, unlink_date: new Date(), unlink_by: req.user._id },
         $unset: { device_hash: "", pairing_code: "", unlink_otp: "", unlink_otp_expires: "" },
       }
     );
+
+    if (!result.modifiedCount) return res.status(409).json({ success: false, message: 'Device pairing changed. Please refresh and try again.' });
 
     audit.log({
       req, category: "DEVICE", action: "DEVICE_UNLINK", status: "SUCCESS",

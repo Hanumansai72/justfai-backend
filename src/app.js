@@ -10,7 +10,7 @@ const errorHandler = require("./middlewares/errorHandler");
 // Security layer
 const { sanitizeMongo, sanitizeXss } = require("./security/sanitize");
 const securityLogger = require("./security/securityLogger");
-const { generalLimiter } = require("./security/rateLimiter");
+const { generalLimiter, publicReadLimiter } = require("./security/rateLimiter");
 
 // Routes
 const userRoutes = require("./routes/userRoutes");
@@ -26,7 +26,9 @@ const earlyInterestRoutes = require("./routes/earlyInterestRoutes");
 const app = express();
 
 // Trust reverse proxies (Vercel, Render, Cloudflare, AWS, Nginx)
-app.set("trust proxy", 1);
+app.set("trust proxy", process.env.TRUST_PROXY
+  ? process.env.TRUST_PROXY.split(",").map(value => value.trim())
+  : process.env.VERCEL === "1" ? 1 : false);
 
 // ─────────────────────────────────────────────────────────────
 // Security Headers
@@ -45,12 +47,13 @@ app.use(
   cors({
     ...require('./config/cors'),
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    exposedHeaders: ["Retry-After", "RateLimit-Limit", "RateLimit-Remaining", "RateLimit-Reset", "RateLimit-Policy"],
     allowedHeaders: ["Content-Type", "Authorization", "x-auth-token", "Accept", "Origin"],
   })
 );
 
 // ─────────────────────────────────────────────────────────────
-// Global Rate Limiter (100 req/min per IP)
+// Secondary IP ceiling; endpoint-specific policies run after authentication.
 // ─────────────────────────────────────────────────────────────
 app.use(generalLimiter);
 
@@ -108,8 +111,8 @@ const { getLatestPublicFirmware } = require("./controllers/admin/firmware.contro
 // ─────────────────────────────────────────────────────────────
 // API Routes
 // ─────────────────────────────────────────────────────────────
-app.get("/api/app-releases/latest", getLatestAppUpdate);
-app.get("/api/firmware/latest",     getLatestPublicFirmware);
+app.get("/api/app-releases/latest", publicReadLimiter, getLatestAppUpdate);
+app.get("/api/firmware/latest",     publicReadLimiter, getLatestPublicFirmware);
 app.use("/api/users", userRoutes);
 app.use("/api/addresses", savedAddressRoutes);
 app.use("/api/devices", deviceRoutes);

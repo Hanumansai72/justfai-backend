@@ -5,6 +5,7 @@ const earlyInterestSchema = new mongoose.Schema({
   email: { type: String, required: true, lowercase: true, trim: true, unique: true },
   city: { type: String, required: true, trim: true },
   purchaseIntent: { type: String },
+  priceRange: { type: String, enum: ['', '4999-5999', '5999-6999', '6999-7999', '7999-8999'], default: '' },
   notes: { type: String, trim: true },
   emailConsent: { type: Boolean, default: false },
   emailConsentAt: { type: Date },

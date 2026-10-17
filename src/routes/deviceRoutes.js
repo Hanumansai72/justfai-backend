@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 
 const { protect, authorize } = require("../middlewares/authMiddleware");
-const { pairingLimiter, otpLimiter, unlinkLimiter, firmwareLimiter } = require("../security/rateLimiter");
+const { pairingLimiter, pairingCheckLimiter, otpLimiter, unlinkLimiter, firmwareLimiter, deviceReadLimiter, deviceWriteLimiter, deviceRegisterLimiter } = require("../security/rateLimiter");
 const validate = require("../security/validate");
 
 // Controllers
@@ -34,6 +34,7 @@ const {
 
 // ── All routes require authentication ──────────────────────────
 router.use(protect);
+router.use((req, res, next) => (req.method === "GET" ? deviceReadLimiter : deviceWriteLimiter)(req, res, next));
 
 // ── Firmware Catalog & Download (Placed before /:id parameter routes) ──
 router.get("/firmware/latest",            getLatestFirmware);
@@ -41,7 +42,7 @@ router.get("/firmware/download/:version", getFirmwareDownload);
 router.post("/firmware/release",          authorize("ADMIN"), createFirmwareRelease);
 
 // ── Pairing domain ─────────────────────────────────────────────
-router.post("/check-pairing",          pairingLimiter, checkDeviceAccess);
+router.post("/check-pairing",          pairingCheckLimiter, checkDeviceAccess);
 router.post("/pair",                   pairingLimiter, validate.pairDevice, pairDevice);
 router.post("/request-unlink-otp",     otpLimiter,    requestUnlinkOtp);
 router.post("/:id/request-unlink-otp", otpLimiter,    requestUnlinkOtp);
@@ -53,7 +54,7 @@ router.get("/my-device",  getMyDevice);
 router.get("/my-devices", getMyDevice); // alias
 
 // ── Core CRUD ──────────────────────────────────────────────────
-router.post("/",   authorize("ADMIN"), validate.registerDevice, registerDevice);
+router.post("/",   authorize("ADMIN"), deviceRegisterLimiter, validate.registerDevice, registerDevice);
 router.get("/:id",                     getDevice);
 router.put("/:id",                     updateDevice);
 router.delete("/:id", authorize("ADMIN"), deleteDevice);

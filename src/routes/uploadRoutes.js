@@ -2,6 +2,7 @@ const express = require("express");
 const router  = express.Router();
 
 const { protect } = require("../middlewares/authMiddleware");
+const { userLimiter, uploadLimiter } = require("../security/rateLimiter");
 const upload      = require("../middlewares/upload.middleware");
 const {
   uploadAvatar,
@@ -11,11 +12,12 @@ const {
 } = require("../controllers/upload.controller");
 
 // All upload routes require authentication
-router.use(protect);
+router.use(protect, userLimiter);
 
 // Upload profile avatar (accepts multipart field name "image" or "avatar")
 router.post(
   "/avatar",
+  uploadLimiter,
   (req, res, next) => {
     // Middleware wrapper allowing either "avatar" or "image" field names
     upload.fields([
@@ -37,6 +39,7 @@ router.post(
 // Upload generic image (240x240 smart crop)
 router.post(
   "/image",
+  uploadLimiter,
   upload.single("image"),
   uploadImage
 );

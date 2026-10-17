@@ -119,8 +119,7 @@ class CloudinaryService {
     try {
       return await cloudinary.uploader.destroy(publicId);
     } catch (err) {
-      console.warn(`[Cloudinary] Delete failed for ${publicId}:`, err.message);
-      return null;
+      throw new Error('Image deletion failed');
     }
   }
 }

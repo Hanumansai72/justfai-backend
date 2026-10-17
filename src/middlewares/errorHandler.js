@@ -1,4 +1,5 @@
 const { log } = require("../security/auditLogger");
+const safeRequestPath = require('../utils/safeRequestPath');
 
 const errorHandler = (err, req, res, next) => {
   const statusCode = err.statusCode || err.status || 500;
@@ -6,20 +7,21 @@ const errorHandler = (err, req, res, next) => {
 
   // Log server-side errors to audit log
   if (statusCode >= 500) {
-    console.error(`[Error] ${req.method} ${req.originalUrl}:`, err.stack);
+    const path = safeRequestPath(req);
+    console.error(`[Error] ${req.method} ${path}:`, err.name || 'Error');
     log({
       req,
       category: "SYSTEM",
       action: "SERVER_ERROR",
       status: "FAILURE",
-      message: `${req.method} ${req.originalUrl} → ${statusCode}: ${message}`,
-      metadata: { statusCode, error: message },
+      message: `${req.method} ${path} → ${statusCode}`,
+      metadata: { statusCode, errorType: err.name || 'Error' },
     });
   }
 
   res.status(statusCode).json({
     success: false,
-    message,
+    message: statusCode >= 500 && process.env.NODE_ENV === 'production' ? 'Internal Server Error' : message,
     ...(process.env.NODE_ENV === "development" && { stack: err.stack }),
   });
 };

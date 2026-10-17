@@ -6,12 +6,14 @@
 const User = require("../models/User");
 
 const seedAdmin = async () => {
+  if (process.env.SEED_ADMIN !== "true") return;
   try {
-    const adminEmail    = process.env.ADMIN_DEFAULT_EMAIL || "admin@justride.io";
-    const adminUsername = process.env.ADMIN_DEFAULT_USERNAME || "admin";
-    const adminPassword = (process.env.ADMIN_DEFAULT_PASSWORD && process.env.ADMIN_DEFAULT_PASSWORD.length >= 6)
-      ? process.env.ADMIN_DEFAULT_PASSWORD
-      : "AdminPassword123!";
+    const adminEmail    = process.env.ADMIN_DEFAULT_EMAIL;
+    const adminUsername = process.env.ADMIN_DEFAULT_USERNAME;
+    const adminPassword = process.env.ADMIN_DEFAULT_PASSWORD;
+    if (!adminEmail || !adminUsername || !adminPassword || adminPassword.length < 12) {
+      throw new Error('Admin seed requires explicit email, username and a password of at least 12 characters');
+    }
 
     // Check if an admin account already exists
     const existingAdmin = await User.findOne({
@@ -28,7 +30,7 @@ const seedAdmin = async () => {
         status: "active",
       });
 
-      console.log(`[Seed] Default Admin account created: username="${adminUsername}", email="${adminEmail}" (pwd: ${adminPassword}) 🛡️`);
+      console.log('[Seed] Admin account created');
     } else {
       if (!existingAdmin.username) {
         existingAdmin.username = adminUsername;

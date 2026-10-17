@@ -27,7 +27,7 @@ exports.uploadAvatar = async (req, res, next) => {
 
     // Upload to Cloudinary with smart face-centered 240x240 crop & high-fidelity quality
     const uploadResult = await cloudinaryService.uploadImage(req.file.buffer, {
-      folder:  "justride/avatars",
+      folder:  `justride/users/${req.user._id}/avatars`,
       width:   240,
       height:  240,
       gravity: "face", // Prioritizes human face detection in avatar photos
@@ -87,12 +87,16 @@ exports.uploadImage = async (req, res, next) => {
       });
     }
 
-    const { folder = "justride/general", width = 240, height = 240 } = req.body;
+    const { width = 240, height = 240 } = req.body;
+    const imageWidth = Number(width), imageHeight = Number(height);
+    if (![imageWidth, imageHeight].every(value => Number.isInteger(value) && value >= 1 && value <= 1024)) {
+      return res.status(400).json({ success: false, message: 'Image dimensions must be between 1 and 1024 pixels' });
+    }
 
     const uploadResult = await cloudinaryService.uploadImage(req.file.buffer, {
-      folder,
-      width:   parseInt(width, 10) || 240,
-      height:  parseInt(height, 10) || 240,
+      folder: `justride/users/${req.user._id}/display`,
+      width: imageWidth,
+      height: imageHeight,
       gravity: "auto", // Automatically detects the main subject of interest
     });
 
@@ -167,8 +171,16 @@ exports.deleteImage = async (req, res, next) => {
       if (match) targetPublicId = match[1];
     }
 
-    if (targetPublicId) {
-      await cloudinaryService.deleteImage(targetPublicId).catch(() => null);
+    if (!targetPublicId || typeof targetPublicId !== 'string') {
+      return res.status(400).json({ success: false, message: 'Image identifier is required' });
+    }
+    const prefix = 'justride/users/' + req.user._id + '/';
+    if (!targetPublicId.startsWith(prefix) || !/^[a-zA-Z0-9_/-]+$/.test(targetPublicId)) {
+      return res.status(403).json({ success: false, message: 'Not authorized to delete this image' });
+    }
+    const deleted = await cloudinaryService.deleteImage(targetPublicId);
+    if (!deleted || !['ok', 'not found'].includes(deleted.result)) {
+      return res.status(503).json({ success: false, message: 'Image deletion could not be confirmed. Please try again.' });
     }
 
     res.status(200).json({

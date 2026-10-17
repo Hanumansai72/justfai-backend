@@ -103,7 +103,7 @@ exports.checkUpdate = async (req, res, next) => {
     const hasUpdate = !!targetVersion && isNewerVersion(current, targetVersion);
     const now = new Date();
 
-    await Device.updateOne(
+    const previous = await Device.findOneAndUpdate(
       { _id: device._id },
       {
         $set: {
@@ -111,10 +111,12 @@ exports.checkUpdate = async (req, res, next) => {
           latest_firmware: targetVersion || null,
           firmware_update_available: hasUpdate,
         },
-      }
+      },
+      { new: false, projection: 'latest_firmware firmware_update_available' }
     );
 
-    if (hasUpdate && device.linked_to) {
+    if (hasUpdate && device.linked_to && previous &&
+        (!previous.firmware_update_available || previous.latest_firmware !== targetVersion)) {
       await sendNotification({
         user_id: device.linked_to,
         type: "FIRMWARE_UPDATE",

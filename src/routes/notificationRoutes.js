@@ -1,4 +1,5 @@
 const express = require("express");
+const { userLimiter } = require("../security/rateLimiter");
 const router  = express.Router();
 
 const { protect } = require("../middlewares/authMiddleware");
@@ -9,7 +10,7 @@ const {
 } = require("../controllers/notification.controller");
 
 // All notification routes require authentication
-router.use(protect);
+router.use(protect, userLimiter);
 
 router.get("/",            getNotifications);
 router.patch("/:id/read",  markAsRead);

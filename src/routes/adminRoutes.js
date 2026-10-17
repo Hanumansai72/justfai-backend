@@ -10,7 +10,7 @@ const express = require("express");
 const router  = express.Router();
 
 const { protect, authorize } = require("../middlewares/authMiddleware");
-const { authLimiter }        = require("../security/rateLimiter");
+const { authIpLimiter, loginLimiter, staffLimiter, uploadLimiter, deviceRegisterLimiter } = require("../security/rateLimiter");
 
 // Auth & Staff Controllers
 const {
@@ -41,10 +41,10 @@ const {
 } = require("../controllers/admin/support.controller");
 
 // ── Public Admin Login Route ────────────────────────────────────
-router.post("/login", authLimiter, adminLogin);
+router.post("/login", authIpLimiter, loginLimiter, adminLogin);
 
 // ── Protected Staff Routes (ADMIN & HELPER) ─────────────────────
-router.use(protect);
+router.use(protect, staffLimiter);
 
 // Profile & Self Credential Updates
 router.get("/me",              authorize("ADMIN", "HELPER"), getAdminProfile);
@@ -68,7 +68,7 @@ router.patch("/users/:id/status", authorize("ADMIN"), updateUserStatus);
 router.delete("/users/:id",       authorize("ADMIN"), deleteUser);
 
 // Device Management & Control
-router.post("/devices",                   authorize("ADMIN"),           registerDevice);
+router.post("/devices",                   authorize("ADMIN"), deviceRegisterLimiter, registerDevice);
 router.get("/devices",                    authorize("ADMIN", "HELPER"), getDevices);
 router.get("/devices/:id",                authorize("ADMIN", "HELPER"), getDeviceById);
 router.put("/devices/:id",                authorize("ADMIN"),           updateDevice);
@@ -100,15 +100,15 @@ const {
 } = require("../controllers/admin/appRelease.controller");
 
 // Firmware Releases (Admin only - supports direct .bin upload)
-router.post("/firmware",              authorize("ADMIN"), firmwareUpload.single("firmware_file"), createFirmwareRelease);
+router.post("/firmware",              authorize("ADMIN"), uploadLimiter, firmwareUpload.single("firmware_file"), createFirmwareRelease);
 router.get("/firmware",               authorize("ADMIN", "HELPER"), getFirmwareReleases);
 router.put("/firmware/:id",           authorize("ADMIN"), updateFirmwareRelease);
 router.patch("/firmware/:id/feature", authorize("ADMIN"), selectFeaturedFirmware);
 router.delete("/firmware/:id",        authorize("ADMIN"), deleteFirmwareRelease);
 
 // Mobile App APK Releases (Admin only - supports direct .apk upload to Cloudflare R2)
-router.post("/app-releases/upload-url",  authorize("ADMIN"), getUploadUrl);
-router.post("/app-releases",             authorize("ADMIN"), apkUpload.single("apk_file"), createAppRelease);
+router.post("/app-releases/upload-url",  authorize("ADMIN"), uploadLimiter, getUploadUrl);
+router.post("/app-releases",             authorize("ADMIN"), uploadLimiter, apkUpload.single("apk_file"), createAppRelease);
 router.get("/app-releases",              authorize("ADMIN", "HELPER"), getAppReleases);
 router.put("/app-releases/:id",          authorize("ADMIN"), updateAppRelease);
 router.patch("/app-releases/:id/feature",authorize("ADMIN"), selectFeaturedRelease);

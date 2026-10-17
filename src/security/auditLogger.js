@@ -7,8 +7,7 @@ const { enqueueAuditLog } = require("../queues/audit.queue");
 
 /** Extracts real client IP (handles proxies / load balancers) */
 const getClientIp = (req) =>
-  req.headers["x-forwarded-for"]?.split(",")[0]?.trim() ||
-  req.headers["x-real-ip"] ||
+  req.ip ||
   req.socket?.remoteAddress ||
   "unknown";
 

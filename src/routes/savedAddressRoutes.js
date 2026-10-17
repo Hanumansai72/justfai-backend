@@ -1,4 +1,5 @@
 const express = require("express");
+const { userLimiter } = require("../security/rateLimiter");
 const router = express.Router();
 const {
   createAddress,
@@ -10,7 +11,7 @@ const {
 const { protect } = require("../middlewares/authMiddleware");
 
 // All saved address routes require authentication
-router.use(protect);
+router.use(protect, userLimiter);
 
 router.route("/")
   .post(createAddress)

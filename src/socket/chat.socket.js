@@ -12,26 +12,9 @@
 const chatService = require("../services/chat.service");
 const presenceService = require("../services/presence.service");
 
-// Simple sliding window rate limiter per socket (max 10 messages per 5 seconds)
-const socketMessageCounts = new Map();
-const RATE_LIMIT_MAX = 10;
-const RATE_LIMIT_WINDOW_MS = 5000;
-
-const isRateLimited = (socketId) => {
-  const now = Date.now();
-  const entry = socketMessageCounts.get(socketId) || { count: 0, resetAt: now + RATE_LIMIT_WINDOW_MS };
-
-  if (now > entry.resetAt) {
-    entry.count = 1;
-    entry.resetAt = now + RATE_LIMIT_WINDOW_MS;
-    socketMessageCounts.set(socketId, entry);
-    return false;
-  }
-
-  entry.count += 1;
-  socketMessageCounts.set(socketId, entry);
-  return entry.count > RATE_LIMIT_MAX;
-};
+const { createHash } = require('node:crypto');
+const { getStore } = require('../security/rateLimitStore');
+const { chatMessage: messagePolicy } = require('../security/rateLimitPolicies');
 
 module.exports = (io, socket) => {
   const user = socket.user;
@@ -110,10 +93,17 @@ module.exports = (io, socket) => {
   // ─────────────────────────────────────────────
   socket.on("send_message", async (data, callback) => {
     try {
-      if (isRateLimited(socket.id)) {
-        if (typeof callback === "function") {
-          return callback({ success: false, message: "Rate limit exceeded. Please slow down." });
-        }
+      let budget;
+      try {
+        const key = createHash('sha256').update('user:' + userId).digest('hex');
+        budget = await getStore().consume('rl:v1:chatMessage:' + key, messagePolicy);
+      } catch {
+        console.warn('[socket-rate-limit] Shared store unavailable');
+        if (typeof callback === 'function') callback({ success: false, code: 'RATE_LIMIT_UNAVAILABLE', message: 'Please try again shortly.', retryAfter: 5 });
+        return;
+      }
+      if (!budget.allowed) {
+        if (typeof callback === 'function') callback({ success: false, code: 'RATE_LIMITED', message: 'Too many messages. Please slow down.', retryAfter: Math.ceil(budget.resetMs / 1000) });
         return;
       }
 
@@ -215,7 +205,7 @@ module.exports = (io, socket) => {
   // Cleans up presence and memory rate limiters
   // ─────────────────────────────────────────────
   socket.on("disconnect", async () => {
-    socketMessageCounts.delete(socket.id);
+
 
     const isFullyOffline = await presenceService.setUserOffline(userId, socket.id);
     if (isFullyOffline) {

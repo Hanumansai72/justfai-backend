@@ -1,4 +1,5 @@
 const express = require("express");
+const { userLimiter } = require("../security/rateLimiter");
 const router  = express.Router();
 
 const { protect } = require("../middlewares/authMiddleware");
@@ -13,7 +14,7 @@ const {
 } = require("../controllers/support.controller");
 
 // All support and reporting routes require authentication
-router.use(protect);
+router.use(protect, userLimiter);
 
 // Issue reporting & feedback
 router.post("/device-problem",     reportDeviceProblem);

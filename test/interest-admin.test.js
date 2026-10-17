@@ -13,8 +13,8 @@ test('admin and helper read saved interests; public and customer accounts cannot
     else process.env.JWT_SECRET = previousSecret;
   });
   let role = 'ADMIN';
-  t.mock.method(User, 'findById', () => ({ select: () => ({ lean: async () => ({ role, status: 'active' }) }) }));
-  const record = { _id: 'interest-test', name: 'Rider', email: 'rider@example.com', city: 'Hyderabad', confirmationEmailStatus: 'sent' };
+  t.mock.method(User, 'findById', () => ({ select: () => ({ lean: async () => ({ _id: 'staff-test', role, status: 'active' }) }) }));
+  const record = { _id: 'interest-test', name: 'Rider', email: 'rider@example.com', city: 'Hyderabad', priceRange: '5999-6999', confirmationEmailStatus: 'sent' };
   t.mock.method(EarlyInterest, 'find', () => ({ sort: order => {
     assert.deepEqual(order, { createdAt: -1 });
     return { skip: offset => {

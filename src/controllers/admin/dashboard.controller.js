@@ -164,6 +164,7 @@ exports.getSystemHealth = async (req, res, next) => {
       data: {
         status: dbState === 1 ? "healthy" : "degraded",
         timestamp: new Date().toISOString(),
+        rate_limiting: { ...require('../../security/rateLimiter').metrics },
         database: {
           state: dbStateMap[dbState] || "unknown",
           ping_ms: dbPingMs,
