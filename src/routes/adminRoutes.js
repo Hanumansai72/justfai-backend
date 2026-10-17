@@ -139,6 +139,7 @@ const {
 router.get("/users/:id/activity",                   authorize("ADMIN", "HELPER"), getUserActivityLogs);
 
 // Customer Support & Troubleshooting
+router.get('/support/help-feedback', authorize('ADMIN', 'HELPER'), adminCache('support'), require('../controllers/help.controller').getFeedbackSummary);
 router.get("/support",                              authorize("ADMIN", "HELPER"), adminCache('support'), getSupportTickets);
 router.get("/support/:id",                          authorize("ADMIN", "HELPER"), getSupportTicket);
 router.patch("/support/:id",                        authorize("ADMIN", "HELPER"), updateSupportTicket);

@@ -17,7 +17,7 @@ const messageSchema = new mongoose.Schema(
 
 const supportTicketSchema = new mongoose.Schema(
   {
-    // Auto-generated readable ticket number e.g. TKT-000042
+    // Auto-generated readable ticket reference; existing references stay valid.
     ticket_number: {
       type: String,
       unique: true,
@@ -35,7 +35,7 @@ const supportTicketSchema = new mongoose.Schema(
     },
     category: {
       type: String,
-      enum: ["device_problem", "connection_issue", "contact_support", "feedback", "general"],
+      enum: ["device_problem", "connection_issue", "navigation_issue", "firmware_problem", "account_problem", "contact_support", "feedback", "general"],
       default: "general",
       index: true,
     },
@@ -47,6 +47,19 @@ const supportTicketSchema = new mongoose.Schema(
     description: {
       type: String,
       trim: true,
+    },
+    help_article_id: { type: String },
+    diagnostics: {
+      type: new mongoose.Schema({
+        app_version: { type: String, maxlength: 80 },
+        firmware_version: { type: String, maxlength: 80 },
+        phone_model: { type: String, maxlength: 160 },
+        platform: { type: String, maxlength: 80 },
+        os_version: { type: String, maxlength: 80 },
+        error_code: { type: String, maxlength: 160 },
+        consented_at: { type: Date, required: true },
+      }, { _id: false }),
+      default: undefined,
     },
     status: {
       type: String,
@@ -79,8 +92,8 @@ const supportTicketSchema = new mongoose.Schema(
 // Auto-generate ticket_number before first save
 supportTicketSchema.pre("save", async function () {
   if (!this.ticket_number) {
-    const count = await mongoose.model("SupportTicket").countDocuments();
-    this.ticket_number = `TKT-${String(count + 1).padStart(6, "0")}`;
+    // Independent requests must not derive the same number from a row count.
+    this.ticket_number = `TKT-${require('node:crypto').randomBytes(8).toString('hex').toUpperCase()}`;
   }
 });
 

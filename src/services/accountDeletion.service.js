@@ -32,7 +32,7 @@ async function retireAccount(userId, challenge) {
     if (await Device.exists({ linked_to: userId }).session(session)) {
       throw deletionError('Unlink your device before deleting your account.', 'DEVICE_LINKED');
     }
-    for (const name of ['Saved_address.model', 'Ride.model', 'SupportTicket.model']) {
+    for (const name of ['Saved_address.model', 'Ride.model', 'SupportTicket.model', 'HelpFeedback.model']) {
       await require('../models/' + name).deleteMany({ user_id: userId }, { session });
     }
     await require('../models/Notification.model').deleteMany({ $or: [

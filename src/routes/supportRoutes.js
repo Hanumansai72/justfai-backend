@@ -1,8 +1,11 @@
 const express = require("express");
 const { userLimiter } = require("../security/rateLimiter");
 const router  = express.Router();
+const help = require('../controllers/help.controller');
+const { uploadLimiter } = require('../security/rateLimiter');
+const upload = require('../middlewares/upload.middleware');
 
-const { protect } = require("../middlewares/authMiddleware");
+const { protect, authorize } = require("../middlewares/authMiddleware");
 const {
   reportDeviceProblem,
   reportConnectionIssue,
@@ -15,6 +18,9 @@ const {
 
 // All support and reporting routes require authentication
 router.use(protect, userLimiter);
+router.post('/help-feedback', authorize('USER'), help.saveFeedback);
+router.post('/attachments', authorize('USER'), uploadLimiter, upload.single('image'), help.uploadAttachment);
+router.post('/tickets', authorize('USER'), help.createTicket);
 
 // Issue reporting & feedback
 router.post("/device-problem",     reportDeviceProblem);

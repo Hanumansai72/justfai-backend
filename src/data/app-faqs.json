@@ -1,0 +1,98 @@
+[
+  {
+    "id": "pair-first",
+    "question": "How do I connect JustRide for the first time?"
+  },
+  {
+    "id": "permissions",
+    "question": "Which phone permissions do I need?"
+  },
+  {
+    "id": "first-ride",
+    "question": "How do I start my first ride?"
+  },
+  {
+    "id": "destination",
+    "question": "How do I set or change a destination?"
+  },
+  {
+    "id": "not-found",
+    "question": "Why is my JustRide not appearing in Bluetooth search?"
+  },
+  {
+    "id": "disconnects",
+    "question": "Why does Bluetooth keep disconnecting?"
+  },
+  {
+    "id": "connected-no-data",
+    "question": "Why is the device connected but not receiving directions?"
+  },
+  {
+    "id": "reconnect",
+    "question": "How do I reconnect after a restart or lost connection?"
+  },
+  {
+    "id": "switch-phone",
+    "question": "Can I switch to another phone?"
+  },
+  {
+    "id": "unlink",
+    "question": "How do I remove a linked device?"
+  },
+  {
+    "id": "map-missing",
+    "question": "Why is the map not showing on the device?"
+  },
+  {
+    "id": "gps-accuracy",
+    "question": "Why is my location inaccurate?"
+  },
+  {
+    "id": "route-mismatch",
+    "question": "Why does the device show a different route from my phone?"
+  },
+  {
+    "id": "wrong-arrow",
+    "question": "Why is the navigation arrow pointing the wrong way?"
+  },
+  {
+    "id": "frozen-map",
+    "question": "What should I do if navigation freezes or keeps refreshing?"
+  },
+  {
+    "id": "screen-lock",
+    "question": "What if navigation stops when my phone screen locks?"
+  },
+  {
+    "id": "firmware-version",
+    "question": "How do I check my firmware version?"
+  },
+  {
+    "id": "firmware-update",
+    "question": "How do I update device firmware?"
+  },
+  {
+    "id": "firmware-failed",
+    "question": "What should I do if a firmware update fails?"
+  },
+  {
+    "id": "ride-history",
+    "question": "Where can I view previous rides?"
+  },
+  {
+    "id": "history-missing",
+    "question": "Why is my ride history missing?"
+  },
+  {
+    "id": "edit-account",
+    "question": "How do I edit my account information?"
+  },
+  {
+    "id": "password",
+    "question": "How do I change or reset my password?"
+  },
+  {
+    "id": "delete-account",
+    "question": "How do I delete my account and ride data?"
+  }
+]
