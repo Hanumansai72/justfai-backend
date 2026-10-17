@@ -188,6 +188,17 @@ npm start
 - Summaries contain start/end places and times, measured distance/duration/speeds, and `completed` or `stopped` status. They do not contain the continuous GPS trace. Values are client-reported ride telemetry.
 - Self-service and admin account deletion also remove the user's rides. Deploy this backend before using the updated app's history screens; older releases only logged ride summaries, so their past rides cannot be recovered.
 
+## Account deletion
+
+- `GET /api/users/deletion-status` returns the signed-in customer's linked device, masked email, and whether their current password is required. It is never cached.
+- A linked device must first be released through the existing email unlink OTP endpoints. The app prompts for this step from both Profile deletion and Device Settings. Unlinking clears ownership and device credentials so another account can pair the device.
+- `POST /api/users/delete-account/otp` requires the current password for local accounts and sends a separate deletion OTP to the registered email. Codes expire after 10 minutes, allow five attempts, and have a 60-second resend cooldown plus the existing OTP/email rate limits. Only an HMAC digest is stored; failed delivery leaves no usable challenge. Hostinger SMTP through Nodemailer sends these security emails independently of marketing consent.
+- `DELETE /api/users/delete-account` (also `DELETE /api/users/me`) requires that deletion OTP and the local account password. No linked device is allowed, even if its pairing flag is inconsistent. A transaction removes saved places, rides, support tickets and notifications, anonymizes firmware initiation records, revokes credentials/sessions and marks the account `deleted`.
+- A minimal account reservation retains email, normalized phone, deletion timestamp and security/audit references. Existing unique indexes prevent reuse through registration or profile changes; deleted accounts cannot log in, use Google sign-in, or be reactivated by the admin status endpoint. Admin deletion also reserves identities and refuses linked devices.
+- Phone numbers normalize to international format; a local 10-digit number is treated as Indian (`+91`). Existing phone formats normalize when deleted. If legacy duplicate formats collide with an existing unique reservation, deletion rolls back for operator resolution rather than freeing either identity.
+- Deletion and pairing use MongoDB transactions and coordinate through the same user document, then invalidate admin caches after commit. Deploy on a replica set such as the configured MongoDB Atlas cluster. Standalone MongoDB without transaction support is not supported for these operations.
+- Deploy this backend before installing the updated APK. The old password-only deletion path is intentionally rejected. Tests use mocked HTTP/mail and database fixtures; live deletion and SMTP delivery have not been exercised against a real account.
+
 ## Admin list pagination
 
 Admin list endpoints default to 10 records and cap requested page sizes at 10. Lists use newest-first ordering with an ID tie-breaker; pairing history uses the pairing date. Interested Users also returns 10 per page. Staff totals cover the full filtered directory, and notification categories are filtered before pagination.

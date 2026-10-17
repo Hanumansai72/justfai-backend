@@ -36,4 +36,11 @@ const accountConfirmation = (name) => message('Welcome to JustRide', [`Hi ${firs
 const passwordChanged = (name) => message('Your JustRide password was changed', [`Hi ${firstName(name)},`,
   'Your password has been reset successfully.', 'If this was not you, contact us immediately.']);
 
-module.exports = { interestConfirmation, unlinkOtp, passwordReset, accountConfirmation, passwordChanged };
+const accountDeletionOtp = (name, otp) => message('Confirm deletion of your JustRide account', [
+  `Hi ${firstName(name)},`, `Your account deletion code is ${otp}. It expires in 10 minutes.`,
+  'Your device must be unlinked before you can delete your account.',
+  'Deleting your account removes your profile and ride data. Your email and phone number remain reserved and cannot be used to create another account.',
+  'Never share this code. If you did not request account deletion, ignore this email and secure your account.',
+]);
+
+module.exports = { interestConfirmation, unlinkOtp, passwordReset, accountConfirmation, passwordChanged, accountDeletionOtp };

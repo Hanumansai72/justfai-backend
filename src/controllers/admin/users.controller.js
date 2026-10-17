@@ -5,9 +5,8 @@
  *   - getUsers: lean() + pagination + parallel count+data
  *   - getUserById: lean() + projection, no full doc hydration
  *   - updateUserStatus: atomic findByIdAndUpdate — no fetch+save
- *   - deleteUser: existence + paired-device check fused into query;
- *     soft-delete pattern preferred (status: "banned") over hard delete
- *     to preserve audit trail and foreign key integrity.
+ *   - deleteUser: pre-checks run in parallel; transactional retirement
+ *     removes personal content and reserves deleted email/phone identities.
  */
 const User   = require("../../models/User");
 const Device = require("../../models/device.model");
@@ -105,7 +104,7 @@ exports.updateUserStatus = async (req, res, next) => {
 
     // Atomic update — no fetch+save needed
     const user = await User.findOneAndUpdate(
-      { _id: req.params.id, role: "USER" },
+      { _id: req.params.id, role: "USER", status: { $ne: "deleted" } },
       { $set: { status, status_reason: reason || null } },
       { new: true, select: "name email role status status_reason" }
     ).lean();
@@ -126,7 +125,7 @@ exports.updateUserStatus = async (req, res, next) => {
 };
 
 // ─────────────────────────────────────────────
-// @desc    Hard-delete a user (Admin Only)
+// @desc    Retire a user and reserve their identity (Admin Only)
 // @route   DELETE /api/admin/users/:id
 // @access  Private/Admin
 // Note: Blocked if user has an active paired device.
@@ -155,13 +154,8 @@ exports.deleteUser = async (req, res, next) => {
       });
     }
 
-    // Parallel: delete user + their saved addresses
-    const SavedAddress = require("../../models/Saved_address.model");
-    await Promise.all([
-      User.deleteOne({ _id: req.params.id, role: "USER" }),
-      SavedAddress.deleteMany({ user_id: req.params.id }),
-        require('../../models/Ride.model').deleteMany({ user_id: req.params.id }),
-    ]);
+    // Preserve the identity reservation so deletion cannot free email/phone.
+    await require('../../services/accountDeletion.service').retireAccount(req.params.id);
 
     audit.log({
       req, category: "ADMIN", action: "USER_DELETE", status: "SUCCESS",

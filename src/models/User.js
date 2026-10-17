@@ -20,6 +20,7 @@ const userSchema = new mongoose.Schema(
       unique: true,
       sparse: true, // Allows null/undefined without causing duplicate key collisions
       trim: true,
+      set: require('../utils/normalizePhone'),
     },
     email: {
       type: String,
@@ -56,7 +57,7 @@ const userSchema = new mongoose.Schema(
     // Admin-controlled lifecycle state
     status: {
       type: String,
-      enum: ["active", "suspended", "banned"],
+      enum: ["active", "suspended", "banned", "deleted"],
       default: "active",
       index: true,
     },
@@ -65,6 +66,14 @@ const userSchema = new mongoose.Schema(
       trim: true,
       default: null,
     },
+    deleted_at: { type: Date },
+    device_link_version: { type: Number, default: 0, select: false },
+    deletion_otp_hash: { type: String, select: false },
+    deletion_otp_nonce: { type: String, select: false },
+    deletion_otp_expires: { type: Date, select: false },
+    deletion_otp_sent_at: { type: Date, select: false },
+    deletion_otp_attempts: { type: Number, default: 0, select: false },
+    deletion_otp_ready: { type: Boolean, default: false, select: false },
     // Password reset fields
     password_reset_token: {
       type: String,

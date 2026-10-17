@@ -37,6 +37,9 @@ const formatUserResponse = (user) => ({
  * set secure HTTP-only cookies, and return structured JSON response.
  */
 const issueTokensAndRespond = async (res, user, statusCode = 200, customMessage = null) => {
+  if (user.status && user.status !== 'active') {
+    return res.status(403).json({ success: false, message: 'This account is no longer active.' });
+  }
   const accessToken  = generateAccessToken(user);
   const refreshToken = generateRefreshToken(user);
   const hashedRefreshToken = hashToken(refreshToken);
@@ -161,6 +164,9 @@ exports.googleAuth = async (req, res, next) => {
     const { sub: google_id, email, name, picture: avatar } = payload;
 
     let user = await User.findOne({ $or: [{ google_id }, { email }] });
+    if (user?.status === 'deleted') {
+      return res.status(403).json({ success: false, message: 'This account was deleted. Its email cannot be used again.' });
+    }
 
     if (!user) {
       const cleanUsername = (email.split("@")[0].replace(/[^a-zA-Z0-9]/g, "") + "_" + Math.floor(1000 + Math.random() * 9000)).toLowerCase();
@@ -692,78 +698,3 @@ exports.changePassword = async (req, res, next) => {
     next(error);
   }
 };
-
-// ─────────────────────────────────────────────
-// @desc    Delete Account (Self-service user deletion)
-// @route   DELETE /api/users/me (or /api/users/delete-account)
-// @access  Private
-// ─────────────────────────────────────────────
-exports.deleteAccount = async (req, res, next) => {
-  try {
-    if (req.user.role !== 'USER') {
-      return res.status(403).json({ success: false, message: 'Staff accounts cannot use customer account deletion' });
-    }
-    const { password } = req.body;
-
-    const user = await User.findById(req.user._id).select("+password");
-    if (!user) {
-      return res.status(404).json({ success: false, message: "User not found" });
-    }
-
-    // Require password confirmation for local accounts with password
-    if (user.password && user.auth_provider === "local") {
-      if (!password) {
-        return res.status(400).json({
-          success: false,
-          message: "Please provide your current password to confirm account deletion",
-        });
-      }
-
-      const isMatch = await user.matchPassword(password);
-      if (!isMatch) {
-        return res.status(400).json({ success: false, message: "Incorrect password" });
-      }
-    }
-
-    const Device        = require("../models/device.model");
-    const SavedAddress  = require("../models/Saved_address.model");
-    const Notification  = require("../models/Notification.model");
-
-    // Auto-unlink any paired device
-    await Device.updateMany(
-      { linked_to: user._id },
-      {
-        $set:   { is_paired: false, linked_to: null, unlink_date: new Date(), unlink_by: user._id },
-        $unset: { device_hash: "", pairing_code: "", unlink_otp: "", unlink_otp_expires: "" },
-      }
-    );
-
-    // Parallel delete of all associated personal records
-    await Promise.all([
-      SavedAddress.deleteMany({ user_id: user._id }),
-        require('../models/Ride.model').deleteMany({ user_id: user._id }),
-      Notification.deleteMany({ user_id: user._id }),
-      User.deleteOne({ _id: user._id }),
-    ]);
-
-    clearTokenCookies(res);
-
-    audit.log({
-      req,
-      category: "AUTH",
-      action: "USER_DELETE_SELF",
-      status: "SUCCESS",
-      resource_type: "User",
-      resource_id: user._id,
-      message: `User self-deleted account: ${user.email}`,
-    });
-
-    res.status(200).json({
-      success: true,
-      message: "Your account and associated data have been deleted successfully",
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-

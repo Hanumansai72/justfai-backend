@@ -8,6 +8,9 @@
  *   - All "is owner" checks fused into the DB query where possible (no separate ownership queries)
  */
 const Device = require("../../models/device.model");
+const User = require('../../models/User');
+const mongoose = require('mongoose');
+const cache = require('../../services/cache.service');
 const audit  = require("../../security/auditLogger");
 const { sendNotification } = require("../notification.controller");
 const { sendEmail } = require('../../services/email.service');
@@ -195,20 +198,29 @@ exports.pairDevice = async (req, res, next) => {
       ...(device_id && !device.device_id && { device_id }),
     };
 
-    const pairedDevice = await Device.findOneAndUpdate(
-      {
-        _id:        device._id,
-        is_paired:  false,
-        is_blocked: false,
-        is_retired: false,
-        is_active:  true,
-      },
-      {
-        $set: updatePayload,
-        $inc: { no_of_connection: 1 },
-      },
-      { new: true }
-    );
+    let pairedDevice;
+    await mongoose.connection.transaction(async session => {
+      const account = await User.updateOne({ _id: req.user._id, status: 'active' },
+        { $inc: { device_link_version: 1 } }, { session });
+      if (!account.matchedCount) {
+        throw Object.assign(new Error('Account is no longer active.'), { statusCode: 403 });
+      }
+      pairedDevice = await Device.findOneAndUpdate(
+        {
+          _id:        device._id,
+          is_paired:  false,
+          is_blocked: false,
+          is_retired: false,
+          is_active:  true,
+        },
+        {
+          $set: updatePayload,
+          $inc: { no_of_connection: 1 },
+        },
+        { new: true, session }
+      );
+    });
+    if (pairedDevice) await cache.invalidate(['users', 'devices', 'pairing', 'support', 'dashboard']);
 
     if (!pairedDevice) {
       return res.status(409).json({
