@@ -8,6 +8,7 @@ test('interest saves supported price ranges, rejects invalid input and accepts o
   t.mock.method(Interest, 'exists', async () => false);
   t.mock.method(Interest, 'create', async record => { saved.push(record); return { _id: 'fixture' }; });
   t.mock.method(Interest, 'updateOne', async () => ({}));
+  t.mock.method(require('../src/queues/interestEmail.queue'), 'scheduleInterestEmails', () => {});
   t.mock.method(require('../src/services/email.service'), 'sendEmail', async () => ({ sent: true, code: 'SENT' }));
   const app = express();
   app.use(express.json());

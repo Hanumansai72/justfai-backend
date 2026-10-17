@@ -5,7 +5,7 @@ const { sendEmail, sendInterestUpdate } = require('../src/services/email.service
 const templates = require('../src/services/email.templates');
 const nodemailer = require('nodemailer');
 
-test('Hostinger payload, safe failures, throttling and save-before-send', async (t) => {
+test('Hostinger payload, safe failures, throttling and save-before-queue', async (t) => {
   process.env.MAIL_PROVIDER = 'hostinger-smtp';
   process.env.MAIL_FROM_EMAIL = 'info@justride.cc';
   process.env.MAIL_FROM_NAME = 'JustRide';
@@ -52,7 +52,6 @@ test('Hostinger payload, safe failures, throttling and save-before-send', async 
 
   const EarlyInterest = require('../src/models/EarlyInterest.model');
   let saved = false;
-  let updated = false;
   const records = new Map();
   const exists = t.mock.method(EarlyInterest, 'exists', async (query) => {
     const record = records.get(query.email);
@@ -63,7 +62,7 @@ test('Hostinger payload, safe failures, throttling and save-before-send', async 
     saved = true;
     return { _id: 'test' };
   });
-  t.mock.method(EarlyInterest, 'updateOne', async (_, update) => { updated = true; assert.equal(update.$set.confirmationEmailStatus, 'failed'); });
+  const queued = t.mock.method(require('../src/queues/interestEmail.queue'), 'scheduleInterestEmails', () => { assert.ok(saved); });
   const service = require('../src/services/email.service');
   t.mock.method(service, 'sendEmail', async () => { assert.ok(saved); return { sent: false, code: 'TIMEOUT' }; });
   // Isolate route tests from auth's Redis connections; auth behavior is unchanged.
@@ -85,12 +84,15 @@ test('Hostinger payload, safe failures, throttling and save-before-send', async 
   });
   assert.equal((await submit({ emailConsent: 'false' })).status, 400);
   assert.equal((await submit()).status, 201);
-  assert.ok(saved && updated);
+  assert.ok(saved);
+  assert.equal(records.get('rider@example.com').confirmationEmailStatus, 'queued');
+  assert.equal(queued.mock.callCount(), 1);
   assert.equal(records.get('rider@example.com').emailConsent, false);
   assert.equal(records.get('rider@example.com').emailConsentAt, undefined);
   assert.equal((await submit({ emailConsent: true })).status, 200);
   assert.equal(records.get('rider@example.com').emailConsent, false); // Duplicates cannot change another person's consent.
-  assert.equal(service.sendEmail.mock.callCount(), 1);
+  assert.equal(service.sendEmail.mock.callCount(), 0);
+  assert.equal(queued.mock.callCount(), 1);
   assert.equal((await submit({ email: 'subscriber@example.com', emailConsent: true, emailConsentAt: 'untrusted' })).status, 201);
   const subscriber = records.get('subscriber@example.com');
   assert.ok(subscriber.emailConsentAt instanceof Date);

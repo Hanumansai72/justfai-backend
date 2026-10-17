@@ -31,8 +31,11 @@ Only an accepted SMTP recipient is counted as provider acceptance. No provider r
 credentials, email addresses, reset tokens or OTP values are logged by the service.
 Acceptance does not prove inbox delivery; verify the real test in Webmail and inspect headers.
 
-Interest confirmations are attempted only after the record is saved. Duplicate submissions
-never resend. Delivery status and safe failure codes are recorded on the interest record and
+Interest confirmations are durably queued in the same MongoDB write that saves the interest.
+The request returns 201 after saving; it does not wait for SMTP or email quota checks.
+Duplicate addresses are trimmed/lowercased, checked before insertion, and protected by the
+existing unique email index against simultaneous inserts. Duplicate submissions never
+queue a new confirmation or change the saved consent. Delivery status and safe failure codes are recorded on the interest record and
 shown on the admin Interested Users page. A failed confirmation leaves the record intact.
 The optional future-email checkbox defaults to unchecked. New records save `emailConsent`
 as a strict boolean; opted-in records also save the server timestamp and displayed wording
@@ -42,8 +45,30 @@ must use `sendInterestUpdate({to, subject, html, text})`, which checks saved con
 calling the same SMTP service. Missing consent or a failed database lookup prevents sending.
 This change does not start a campaign or send any future update emails. Submission
 confirmations remain transactional and accurately describe the subscriber's saved choice.
-The request awaits delivery, including on Vercel: no fire-and-forget work after the response.
-Ambiguous sends are not automatically retried to prevent duplicate email.
+`src/queues/interestEmail.queue.js` drains queued records after response finish using
+Vercel's supported `waitUntil` helper, so the function remains alive for background work.
+Each invocation processes at most three records. A new successful submission or an
+authorized Interested Users read also drains remaining queued work. Persistent Node
+deployments start a ten-second polling worker through `startWorkers()`; this does not
+require Redis because the queue entry and customer record are the same MongoDB document.
+
+The worker atomically changes `queued` to `sending` before calling the existing SMTP
+service. Another worker cannot claim a `sending`, `sent` or `failed` entry. Safe pre-send
+quota/configuration failures stay queued with a future attempt time. A timeout or other
+ambiguous delivery failure is not automatically resent. If the process stops after claiming
+a message, `sending` remains visible for manual investigation; SMTP cannot guarantee
+exactly-once delivery across a crash after provider acceptance.
+
+On Vercel, `waitUntil` shares the function's execution timeout. Configure sufficient duration
+for the bounded batch (three SMTP calls can take 45 seconds, plus DB operations). If Vercel
+terminates before claiming work, that record stays queued and the next submission or staff
+queue view resumes it. Without subsequent traffic, recovery or a deferred quota retry on a
+serverless deployment needs a scheduled authorized queue view/drain trigger. No new cron
+service, plan, deployment setting or always-on worker was provisioned by this change.
+Legacy `pending` records are not automatically resent during rollout; only explicitly
+`queued` new submissions are eligible. The admin distinguishes Queued, Sending, Sent,
+Failed and legacy Pending status. No customer-facing success message claims an email
+has already been delivered.
 
 Password reset, device unlink OTP, account creation and password reset completion use this
 same service. Failed reset/OTP delivery clears only that request's matching token/code.
@@ -57,7 +82,7 @@ recipient limit 3/15 minutes; all app email at most 36/hour. With at most 25 int
 hourly windows, app traffic stays at or below 900 messages in any rolling 24 hours.
 Database failures prevent sending rather than bypassing these limits. Counters consume an
 attempt even if the provider fails. Provider limits still apply to manual mailbox usage.
-The existing IP stores are per instance; database recipient and sender limits are shared.
+API request limits use shared Redis counters; database recipient and sender limits are shared.
 For larger launch bursts, reassess the observed allowance and expected volume without purchasing.
 
 ## DNS and delivery checks
@@ -91,7 +116,12 @@ merge any existing SPF and retain an existing DMARC policy. Never change nameser
 Do not claim SPF/DKIM/DMARC passing until verified by provider or received-message headers.
 
 Run `node --test test/email.test.js` for provider payload, secret-free failures, throttling,
-HTML escaping, save-before-send and duplicate suppression without sending real mail.
+HTML escaping, save-before-queue and duplicate suppression without sending real mail.
+Run `node --test test/interest-email-queue.test.js` for immediate HTTP completion while SMTP
+is blocked, concurrent duplicate insert protection, atomic worker claims, safe quota delays
+and no automatic resend after ambiguous delivery.
+
+Background lifetime reference: [Vercel waitUntil](https://vercel.com/docs/functions/functions-api-reference/vercel-functions-package#waituntil).
 
 Sources: [Nodemailer SMTP](https://nodemailer.com/smtp),
 [Agentic Mail](https://www.hostinger.com/support/how-to-use-agentic-mail-in-hostinger/),

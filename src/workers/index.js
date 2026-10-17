@@ -5,10 +5,12 @@
  */
 const { startNotificationWorker } = require("./notification.worker");
 const { startAuditWorker }        = require("./audit.worker");
+const { startInterestEmailWorker } = require('./interestEmail.worker');
 
 const startWorkers = () => {
+  startInterestEmailWorker();
   if (process.env.ENABLE_REDIS !== "true") {
-    console.log("[Workers] Background workers skipped (ENABLE_REDIS is not 'true')");
+    console.log("[Workers] Redis-backed workers skipped (ENABLE_REDIS is not 'true')");
     return;
   }
 

@@ -2,6 +2,17 @@
 
 Date: 17 October 2026. Status: implemented and verified as described below; prepared for GitHub publication at the user's request. Deployment verification, physical device and production load certification remain outstanding.
 
+Follow-up: confirmation emails now use a MongoDB outbox and Vercel `waitUntil` rather
+than blocking submission completion. New records save as `queued`; duplicate email
+submissions do not create another queue entry. A persistent Node worker and subsequent
+submission/admin-view background drains recover queued entries. Ambiguous SMTP sends
+are not automatically retried. See [current email behavior and recovery limits](transactional-email.md).
+Five additional queue regressions cover nonblocking responses, concurrent duplicate
+inserts/workers, deferred quota failures, ambiguous-timeout suppression and a DB failure
+after provider acceptance. Installing the official background helper also surfaced npm
+audit notices in existing dependencies (10 advisories, including a critical proxy-addr
+advisory); dependency remediation was not bundled into this email-flow change.
+
 ## 1. Architecture and API inventory
 
 - Express 5 / Mongoose backend, MongoDB persistence, existing Redis REST/TCP clients, BullMQ queues, Socket.IO chat, Cloudinary images and R2 release downloads.
@@ -80,7 +91,7 @@ Both homepage device images loaded successfully from the 480px WebP sources in t
 
 | Check | Result and limits |
 |---|---|
-| `npm test` backend | 41 passed, 0 failed; live Redis case skipped in normal suite |
+| `npm test` backend | 46 passed, 0 failed after the email-queue follow-up; live Redis case skipped in normal suite |
 | Opt-in `RUN_REDIS_TESTS=true node --test test/rate-limit-redis.integration.test.js` | Passed against configured Redis: 8 concurrent operations through two independent clients allow exactly 3; 200ms window expires. Random `rl:test:` keys expire automatically |
 | Staff `node --test test/client.test.mjs` | 3 passed: duplicate GETs, 429 preserving session/no replay, AbortSignal forwarding |
 | Existing Flutter suite | 83 tests passed, including existing GPS/navigation/ride-related unit/widget coverage |

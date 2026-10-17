@@ -6,6 +6,7 @@ const User = require('../src/models/User');
 const EarlyInterest = require('../src/models/EarlyInterest.model');
 
 test('admin and helper read saved interests; public and customer accounts cannot', async (t) => {
+  t.mock.method(require('../src/queues/interestEmail.queue'), 'scheduleInterestEmails', () => {});
   const previousSecret = process.env.JWT_SECRET;
   process.env.JWT_SECRET = 'test-only-secret';
   t.after(() => {
