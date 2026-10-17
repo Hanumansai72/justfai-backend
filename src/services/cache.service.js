@@ -8,24 +8,39 @@
  *   - Atomic Cache-Aside (getOrSet) pattern
  *   - Seamless bypass if Redis is offline
  */
-const { redisClient, isRedisConnected } = require("../config/redis");
+const { redisClient } = require("../config/redis");
 
 const DEFAULT_TTL_SECONDS = 300; // 5 minutes default
 
 class CacheService {
+  constructor() {
+    // HTTP caching must not inherit BullMQ's unlimited command retries.
+    this.client = redisClient?.duplicate({ maxRetriesPerRequest: 0,
+      enableOfflineQueue: false, connectTimeout: 750, commandTimeout: 750 });
+    this.pending = new Map();
+    this.lastWarning = 0;
+    this.client?.on('error', () => this.warn());
+  }
+
+  warn() {
+    if (Date.now() - this.lastWarning > 30000) {
+      console.warn('[Cache] Redis unavailable; bypassing cache.');
+      this.lastWarning = Date.now();
+    }
+  }
   /**
    * Get value by key.
    * @param {string} key
    * @returns {Promise<any|null>}
    */
   async get(key) {
-    if (!redisClient || !isRedisConnected()) return null;
+    if (this.client?.status !== 'ready') return null;
     try {
-      const data = await redisClient.get(key);
+      const data = await this.client.get(key);
       if (!data) return null;
       return JSON.parse(data);
     } catch (err) {
-      console.warn(`[Cache] GET error for key "${key}":`, err.message);
+      this.warn();
       return null;
     }
   }
@@ -37,17 +52,17 @@ class CacheService {
    * @param {number} [ttlSeconds]
    */
   async set(key, value, ttlSeconds = DEFAULT_TTL_SECONDS) {
-    if (!redisClient || !isRedisConnected()) return false;
+    if (this.client?.status !== 'ready') return false;
     try {
       const payload = JSON.stringify(value);
       if (ttlSeconds > 0) {
-        await redisClient.set(key, payload, "EX", ttlSeconds);
+        await this.client.set(key, payload, "EX", ttlSeconds);
       } else {
-        await redisClient.set(key, payload);
+        await this.client.set(key, payload);
       }
       return true;
     } catch (err) {
-      console.warn(`[Cache] SET error for key "${key}":`, err.message);
+      this.warn();
       return false;
     }
   }
@@ -57,12 +72,12 @@ class CacheService {
    * @param {string} key
    */
   async del(key) {
-    if (!redisClient || !isRedisConnected()) return false;
+    if (this.client?.status !== 'ready') return false;
     try {
-      await redisClient.del(key);
+      await this.client.del(key);
       return true;
     } catch (err) {
-      console.warn(`[Cache] DEL error for key "${key}":`, err.message);
+      this.warn();
       return false;
     }
   }
@@ -73,21 +88,21 @@ class CacheService {
    * @param {string} pattern
    */
   async delPattern(pattern) {
-    if (!redisClient || !isRedisConnected()) return 0;
+    if (this.client?.status !== 'ready') return 0;
     try {
       let cursor = "0";
       let count = 0;
       do {
-        const [nextCursor, keys] = await redisClient.scan(cursor, "MATCH", pattern, "COUNT", 100);
+        const [nextCursor, keys] = await this.client.scan(cursor, "MATCH", pattern, "COUNT", 100);
         cursor = nextCursor;
         if (keys.length > 0) {
-          await redisClient.del(...keys);
+          await this.client.del(...keys);
           count += keys.length;
         }
       } while (cursor !== "0");
       return count;
     } catch (err) {
-      console.warn(`[Cache] DEL_PATTERN error for "${pattern}":`, err.message);
+      this.warn();
       return 0;
     }
   }
@@ -105,12 +120,14 @@ class CacheService {
       return cached;
     }
 
-    // Cache miss: execute fetch
-    const freshData = await fetchFn();
-    if (freshData !== null && freshData !== undefined) {
-      await this.set(key, freshData, ttlSeconds);
-    }
-    return freshData;
+    if (this.pending.has(key)) return this.pending.get(key);
+    // Coalesce concurrent cache misses without changing the data or its TTL.
+    const pending = Promise.resolve().then(fetchFn).then(async freshData => {
+      if (freshData !== null && freshData !== undefined) await this.set(key, freshData, ttlSeconds);
+      return freshData;
+    }).finally(() => this.pending.delete(key));
+    this.pending.set(key, pending);
+    return pending;
   }
 }
 

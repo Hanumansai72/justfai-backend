@@ -26,7 +26,14 @@ exports.protect = async (req, res, next) => {
     // Verify token
     const jwtSecret = process.env.JWT_SECRET;
     if (!jwtSecret) throw new Error("JWT_SECRET must be configured");
-    const decoded = jwt.verify(token, jwtSecret);
+    let decoded;
+    try {
+      decoded = jwt.verify(token, jwtSecret);
+    } catch (error) {
+      if (!['JsonWebTokenError', 'TokenExpiredError', 'NotBeforeError'].includes(error.name)) throw error;
+      return res.status(401).json({ success: false, message: 'Not authorized, token failed' });
+    }
+    if (!decoded?.id) return res.status(401).json({ success: false, message: 'Not authorized, token failed' });
     req.user = await User.findById(decoded.id)
       .select("role status status_reason name email employee_id")
       .lean();
@@ -53,7 +60,11 @@ exports.protect = async (req, res, next) => {
 
     next();
   } catch (error) {
-    return res.status(401).json({ success: false, message: "Not authorized, token failed" });
+    if (error.name === 'CastError') {
+      return res.status(401).json({ success: false, message: 'Not authorized, token failed' });
+    }
+    // Database/configuration failures are service errors, not expired credentials.
+    return next(error);
   }
 };
 
