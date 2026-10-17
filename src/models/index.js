@@ -6,6 +6,7 @@
  */
 module.exports = {
   User:            require("./User"),
+  Admin:           require("./Admin.model"),
   Helper:          require("./Helper.model"),
   Device:          require("./device.model"),
   SupportTicket:   require("./SupportTicket.model"),

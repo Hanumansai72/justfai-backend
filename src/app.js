@@ -111,6 +111,7 @@ app.get("/api/app-releases/latest", publicReadLimiter, getLatestAppUpdate);
 app.get("/api/firmware/latest",     publicReadLimiter, getLatestPublicFirmware);
 app.use("/api/users", userRoutes);
 app.use("/api/addresses", savedAddressRoutes);
+app.use('/api/rides', require('./routes/rideRoutes'));
 app.use("/api/devices", deviceRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/support", supportRoutes);

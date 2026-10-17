@@ -180,7 +180,15 @@ npm start
 
 ---
 
-## Admin lists
+## Customer ride history
+
+- `POST /api/rides` saves an ended navigation summary; `GET /api/rides?page=1&limit=10` returns only the authenticated customer's rides, sorted by `endTime` and ID descending. `limit=1` supplies the home screen's latest ride. The maximum page size is 10.
+- Both routes require an active `USER` account and existing per-user read/write rate limits. The backend derives `user_id` from authentication; request bodies cannot select another account. Responses use `Cache-Control: private, no-store`.
+- A unique `{ user_id, sessionId }` index makes uploads idempotent. Repeated uploads return the first saved summary without modifying it. Ensure the Ride model indexes are created when deploying (Mongoose's normal index creation applies).
+- Summaries contain start/end places and times, measured distance/duration/speeds, and `completed` or `stopped` status. They do not contain the continuous GPS trace. Values are client-reported ride telemetry.
+- Self-service and admin account deletion also remove the user's rides. Deploy this backend before using the updated app's history screens; older releases only logged ride summaries, so their past rides cannot be recovered.
+
+## Admin list pagination
 
 Admin list endpoints default to 10 records and cap requested page sizes at 10. Lists use newest-first ordering with an ID tie-breaker; pairing history uses the pairing date. Interested Users also returns 10 per page. Staff totals cover the full filtered directory, and notification categories are filtered before pagination.
 
@@ -207,3 +215,14 @@ Admin list endpoints default to 10 records and cap requested page sizes at 10. L
 ## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+
+### Single administrator
+
+`Admin.model.js` manages the existing administrator in the `users` collection; `Helper.model.js` manages helper staff. Existing administrator credentials and IDs are preserved. There is no admin signup, promotion endpoint, default password or startup seeder. Only helpers can be provisioned by the existing admin.
+
+Database initialization verifies exactly one `ADMIN` and installs the `single_admin` partial unique index. It never creates an account, resets credentials or deletes duplicate accounts. If the database has zero or multiple admins, initialization fails for explicit operator resolution. Customer account deletion and customer-management actions cannot remove the admin.
+
+Run the isolated account regression checks with `node --test test/single-admin.test.js`.
+
+Local validation: the staff-model/login checks and admin UI production build pass. Live database verification could not run because the configured MongoDB SRV DNS lookup returned `ECONNREFUSED`; the existing database account count and installation of `single_admin` remain unverified. Once database DNS access works, normal database initialization performs the check and creates the index without changing credentials.

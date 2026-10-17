@@ -76,7 +76,7 @@ c:\Hanumansai_Projects\Justride\Backend\
     │   ├── db.js                 # MongoDB Mongoose connection manager
     │   ├── redis.js              # Redis client setup & in-memory fallback
     │   ├── cloudinary.js         # Cloudinary SDK media uploader config
-    │   └── seedAdmin.js          # Default superadmin seeding logic on startup
+    │   └── verifyAdmin.js        # Verify existing singleton admin; never create accounts
     ├── controllers/              # HTTP Request handlers (logic orchestration)
     │   ├── notification.controller.js  # Rider notifications controller
     │   ├── savedAddressController.js   # Rider saved places controller
@@ -150,7 +150,7 @@ c:\Hanumansai_Projects\Justride\Backend\
 
 #### [`server.js`](file:///c:/Hanumansai_Projects/Justride/Backend/server.js)
 - **Role**: Application entry point.
-- **What it does**: Loads environment variables via `dotenv`, initializes MongoDB connection ([`src/config/db.js`](file:///c:/Hanumansai_Projects/Justride/Backend/src/config/db.js)), triggers default admin seeding ([`src/config/seedAdmin.js`](file:///c:/Hanumansai_Projects/Justride/Backend/src/config/seedAdmin.js)), boots background BullMQ workers ([`src/workers/index.js`](file:///c:/Hanumansai_Projects/Justride/Backend/src/workers/index.js)), and starts the HTTP listener on the configured `PORT`.
+- **What it does**: Loads environment variables via `dotenv`, initializes MongoDB connection ([`src/config/db.js`](file:///c:/Hanumansai_Projects/Justride/Backend/src/config/db.js)), verifies exactly one existing admin and its database uniqueness index during database initialization, boots background BullMQ workers ([`src/workers/index.js`](file:///c:/Hanumansai_Projects/Justride/Backend/src/workers/index.js)), and starts the HTTP listener on the configured `PORT`.
 
 #### [`src/app.js`](file:///c:/Hanumansai_Projects/Justride/Backend/src/app.js)
 - **Role**: Express Application Configuration.
@@ -181,9 +181,11 @@ c:\Hanumansai_Projects\Justride\Backend\
 #### [`src/config/cloudinary.js`](file:///c:/Hanumansai_Projects/Justride/Backend/src/config/cloudinary.js)
 - **Purpose**: Sets up Cloudinary v2 SDK using `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET`.
 
-#### [`src/config/seedAdmin.js`](file:///c:/Hanumansai_Projects/Justride/Backend/src/config/seedAdmin.js)
-- **Purpose**: Ensures at least one initial Super Admin account exists in the `Helper` collection when the application first boots.
-- **Default Seed**: Uses `ADMIN_EMAIL` and `ADMIN_PASSWORD` from `.env` or defaults to `admin@justride.com`.
+#### `src/config/verifyAdmin.js`
+- Requires exactly one existing `ADMIN` record and creates a partial unique index preventing a second admin.
+- Does not create accounts, change credentials or remove duplicates. Startup fails safely if zero or multiple admins exist.
+- `Admin.model.js` and `Helper.model.js` are the staff models. The Admin model uses the existing `users` collection to preserve IDs, password hashes, sessions and references.
+- Admin provisioning and user-role promotion are disabled. Only helper staff may be provisioned.
 
 ---
 

@@ -26,9 +26,7 @@ exports.getUsers = async (req, res, next) => {
     const limit  = Math.max(1, Math.min(10, parseInt(req.query.limit, 10) || 10));
     const skip   = (page - 1) * limit;
 
-    const filter = {};
-    if (req.query.role   && ["ADMIN", "USER"].includes(req.query.role.toUpperCase()))
-      filter.role = req.query.role.toUpperCase();
+    const filter = { role: "USER" };
     if (req.query.status && ["active", "suspended", "banned"].includes(req.query.status))
       filter.status = req.query.status;
     // Full-text–style name/email search using case-insensitive regex
@@ -68,7 +66,7 @@ exports.getUserById = async (req, res, next) => {
   try {
     // Fetch user + paired device in parallel
     const [user, pairedDevice] = await Promise.all([
-      User.findById(req.params.id).select(USER_PROJECTION).lean(),
+      User.findOne({ _id: req.params.id, role: "USER" }).select(USER_PROJECTION).lean(),
       Device.findOne({ linked_to: req.params.id, is_paired: true })
         .select("devicename device_id BLE_ADDRESS firmware_version linked_date is_blocked")
         .lean(),
@@ -106,8 +104,8 @@ exports.updateUserStatus = async (req, res, next) => {
     }
 
     // Atomic update — no fetch+save needed
-    const user = await User.findByIdAndUpdate(
-      req.params.id,
+    const user = await User.findOneAndUpdate(
+      { _id: req.params.id, role: "USER" },
       { $set: { status, status_reason: reason || null } },
       { new: true, select: "name email role status status_reason" }
     ).lean();
@@ -144,7 +142,7 @@ exports.deleteUser = async (req, res, next) => {
      * Only select _id/_is_paired — no full document needed for either check.
      */
     const [user, pairedDevice] = await Promise.all([
-      User.findById(req.params.id).select("_id email name").lean(),
+      User.findOne({ _id: req.params.id, role: "USER" }).select("_id email name").lean(),
       Device.exists({ linked_to: req.params.id, is_paired: true }),
     ]);
 
@@ -160,8 +158,9 @@ exports.deleteUser = async (req, res, next) => {
     // Parallel: delete user + their saved addresses
     const SavedAddress = require("../../models/Saved_address.model");
     await Promise.all([
-      User.deleteOne({ _id: req.params.id }),
+      User.deleteOne({ _id: req.params.id, role: "USER" }),
       SavedAddress.deleteMany({ user_id: req.params.id }),
+        require('../../models/Ride.model').deleteMany({ user_id: req.params.id }),
     ]);
 
     audit.log({

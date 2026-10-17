@@ -1,17 +1,8 @@
-/**
- * admin/dashboard.controller.js
- *
- * Optimisation notes:
- *   - getDashboardStats: ALL counts run in a single Promise.all() — N parallel
- *     queries instead of N sequential round-trips. This is the single biggest
- *     win for a stats endpoint that might otherwise take 500ms+.
- *   - getSystemHealth: DB ping + process metrics combined — no DB reads needed.
- */
+// Dashboard metrics share one aggregation per collection and the existing cache.
 const mongoose   = require("mongoose");
 const User        = require("../../models/User");
 const Device      = require("../../models/device.model");
 const SupportTicket = require("../../models/SupportTicket.model");
-const FirmwareHistory = require("../../models/FirmwareHistory.model");
 const cacheService    = require("../../services/cache.service");
 
 // ─────────────────────────────────────────────
@@ -26,50 +17,38 @@ exports.getDashboardStats = async (req, res, next) => {
       "admin:dashboard:stats",
       async () => {
         const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-        const sevenDaysAgo  = new Date(Date.now() -  7 * 24 * 60 * 60 * 1000);
-
-        /**
-         * High-Performance Parallel Aggregation:
-         * All fleet metrics, ticket counts, user stats, and pairing activity run in 1 round-trip.
-         */
-        const [
-          totalUsers,
-          activeUsers,
-          newUsersThisMonth,
-          suspendedUsers,
-          totalDevices,
-          pairedDevices,
-          activeDevices,
-          availableDevices,
-          offlineDevices,
-          blockedDevices,
-          retiredDevices,
-          openTickets,
-          urgentTickets,
-          recentPairings,
-        ] = await Promise.all([
-          User.countDocuments(),
-          User.countDocuments({ status: "active" }),
-          User.countDocuments({ createdAt: { $gte: thirtyDaysAgo } }),
-          User.countDocuments({ status: { $in: ["suspended", "banned"] } }),
-          // Total hardware units
-          Device.countDocuments(),
-          // Paired devices
-          Device.countDocuments({ is_paired: true, is_retired: false, is_blocked: false }),
-          // Active (paired & communicating)
-          Device.countDocuments({ is_paired: true, is_active: true, is_blocked: false, is_retired: false }),
-          // Available (in stock, unpaired, active)
-          Device.countDocuments({ is_paired: false, is_active: true, is_blocked: false, is_retired: false }),
-          // Offline / Disconnected
-          Device.countDocuments({ is_active: false, is_retired: false, is_blocked: false }),
-          // Blocked (stolen / blacklisted)
-          Device.countDocuments({ is_blocked: true }),
-          // Retired (decommissioned)
-          Device.countDocuments({ is_retired: true }),
-          // Open tickets
-          SupportTicket.countDocuments({ status: { $in: ["open", "in_progress"] } }),
-          // Urgent / Critical tickets
-          SupportTicket.countDocuments({ status: { $in: ["open", "in_progress"] }, priority: { $in: ["high", "critical"] } }),
+        const countWhen = condition => ({ $sum: { $cond: [condition, 1, 0] } });
+        const usableDevice = [
+          { $eq: ['$is_blocked', false] },
+          { $eq: ['$is_retired', false] },
+        ];
+        const [userRows, deviceRows, ticketRows, recentPairings] = await Promise.all([
+          User.aggregate([{ $group: {
+            _id: null,
+            total: { $sum: 1 },
+            active: countWhen({ $eq: ['$status', 'active'] }),
+            new_this_month: countWhen({ $gte: ['$createdAt', thirtyDaysAgo] }),
+            suspended: countWhen({ $in: ['$status', ['suspended', 'banned']] }),
+          } }, { $project: { _id: 0 } }]),
+          Device.aggregate([{ $group: {
+            _id: null,
+            total: { $sum: 1 },
+            paired: countWhen({ $and: [...usableDevice, { $eq: ['$is_paired', true] }] }),
+            active: countWhen({ $and: [...usableDevice, { $eq: ['$is_paired', true] }, { $eq: ['$is_active', true] }] }),
+            available: countWhen({ $and: [...usableDevice, { $eq: ['$is_paired', false] }, { $eq: ['$is_active', true] }] }),
+            offline: countWhen({ $and: [...usableDevice, { $eq: ['$is_active', false] }] }),
+            blocked: countWhen({ $eq: ['$is_blocked', true] }),
+            retired: countWhen({ $eq: ['$is_retired', true] }),
+          } }, { $project: { _id: 0 } }]),
+          SupportTicket.aggregate([
+            { $match: { status: { $in: ['open', 'in_progress'] } } },
+            { $group: {
+              _id: null,
+              open_tickets: { $sum: 1 },
+              urgent_tickets: countWhen({ $in: ['$priority', ['high', 'critical']] }),
+            } },
+            { $project: { _id: 0 } },
+          ]),
           // Recent pairings with rich customer & device metadata
           Device.find({ is_paired: true, linked_to: { $ne: null } })
             .select("devicename device_id BLE_ADDRESS device_version firmware_version linked_to linked_date is_active is_blocked")
@@ -98,34 +77,26 @@ exports.getDashboardStats = async (req, res, next) => {
             : null,
         }));
 
+        const users = userRows[0] || {
+          total: 0, active: 0, new_this_month: 0, suspended: 0,
+        };
+        const devices = deviceRows[0] || {
+          total: 0, paired: 0, active: 0, available: 0, offline: 0, blocked: 0, retired: 0,
+        };
+        const support = ticketRows[0] || {
+          open_tickets: 0, urgent_tickets: 0,
+        };
         return {
           overview: {
-            total_users:    totalUsers,
-            active_users:   activeUsers,
-            total_devices:  totalDevices,
-            paired_devices: pairedDevices,
-            open_tickets:   openTickets,
-            urgent_tickets: urgentTickets,
+            total_users: users.total,
+            active_users: users.active,
+            total_devices: devices.total,
+            paired_devices: devices.paired,
+            ...support,
           },
-          users: {
-            total:          totalUsers,
-            active:         activeUsers,
-            new_this_month: newUsersThisMonth,
-            suspended:      suspendedUsers,
-          },
-          devices: {
-            total:     totalDevices,
-            paired:    pairedDevices,
-            active:    activeDevices,
-            available: availableDevices,
-            offline:   offlineDevices,
-            blocked:   blockedDevices,
-            retired:   retiredDevices,
-          },
-          support: {
-            open_tickets:   openTickets,
-            urgent_tickets: urgentTickets,
-          },
+          users,
+          devices,
+          support,
           recent_pairings: formattedRecentPairings,
         };
       },

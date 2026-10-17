@@ -126,6 +126,7 @@ helperSchema.methods.matchPassword = async function (enteredPassword) {
 
 // Compound index for active staff by role & status
 helperSchema.index({ role: 1, status: 1 });
+helperSchema.index({ createdAt: -1, _id: -1 });
 
 helperSchema.plugin(require('./plugins/invalidateAdminCache'), { groups: ['staff', 'support'] });
 

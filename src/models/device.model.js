@@ -50,6 +50,8 @@ const deviceSchema = new mongoose.Schema(
  * Used in: getMyDevice, checkDeviceAccess, pairDevice (3 controllers)
  */
 deviceSchema.index({ linked_to: 1, is_paired: 1 });
+deviceSchema.index({ createdAt: -1, _id: -1 });
+deviceSchema.index({ is_paired: 1, linked_date: -1 });
 
 deviceSchema.plugin(require('./plugins/invalidateAdminCache'), { groups: ['devices', 'pairing', 'support', 'dashboard'] });
 

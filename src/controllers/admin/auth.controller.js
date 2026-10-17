@@ -9,7 +9,7 @@
  *   - Complete Audit Logging for Employee Logins & Lifecycle Operations
  *   - Admin Self-Credential Management
  */
-const User   = require("../../models/User");
+const Admin  = require("../../models/Admin.model");
 const Helper = require("../../models/Helper.model");
 const audit  = require("../../security/auditLogger");
 const {
@@ -66,7 +66,7 @@ exports.adminLogin = async (req, res, next) => {
     const upperIdentifier = cleanIdentifier.toUpperCase();
 
     // 1. Check Super Admin collection first
-    let account = await User.findOne({
+    let account = await Admin.findOne({
       $or: [
         { username: lowerIdentifier },
         { email: lowerIdentifier },
@@ -130,7 +130,7 @@ exports.adminLogin = async (req, res, next) => {
     const refreshToken = generateRefreshToken(account);
     const hashedToken  = hashToken(refreshToken);
 
-    const Model = isHelper ? Helper : User;
+    const Model = isHelper ? Helper : Admin;
     await Model.updateOne(
       { _id: account._id },
       {
@@ -178,7 +178,7 @@ exports.adminLogout = async (req, res, next) => {
   try {
     const refreshToken = req.cookies?.refreshToken;
     if (refreshToken) {
-      const Model = req.user.role === 'ADMIN' ? User : Helper;
+      const Model = req.user.role === 'ADMIN' ? Admin : Helper;
       await Model.updateOne({ _id: req.user._id }, {
         $pull: { refresh_tokens: { token: hashToken(refreshToken) } },
       });
@@ -234,7 +234,7 @@ exports.updateAdminCredentials = async (req, res, next) => {
   try {
     const { name, username, email, currentPassword, newPassword } = req.body;
     const isHelper = req.user.role !== "ADMIN" && !!req.user.employee_id;
-    const Model = isHelper ? Helper : User;
+    const Model = isHelper ? Helper : Admin;
 
     const account = await Model.findById(req.user._id).select("+password");
     if (!account) {
@@ -323,6 +323,10 @@ exports.createHelperUser = async (req, res, next) => {
       role = "HELPER",
     } = req.body;
 
+    if (!["HELPER", "SENIOR_HELPER", "LEAD_SUPPORT"].includes(role)) {
+      return res.status(400).json({ success: false, message: "Only helper staff accounts can be created" });
+    }
+
     if (!name || !email || !password) {
       return res.status(400).json({
         success: false,
@@ -360,7 +364,7 @@ exports.createHelperUser = async (req, res, next) => {
       username:    username ? username.toLowerCase().trim() : assignedEmployeeId.toLowerCase(),
       password,
       phonenumber: phonenumber || null,
-      role:        ["HELPER", "SENIOR_HELPER", "LEAD_SUPPORT"].includes(role) ? role : "HELPER",
+      role,
       created_by:  req.user._id,
       status:      "active",
     });
@@ -508,12 +512,11 @@ exports.updateHelperStatus = async (req, res, next) => {
 // ─────────────────────────────────────────────
 exports.deleteHelperUser = async (req, res, next) => {
   try {
-    const helper = await Helper.findById(req.params.id);
+    const helper = await Helper.findByIdAndDelete(req.params.id)
+      .select("employee_id name email").lean();
     if (!helper) {
       return res.status(404).json({ success: false, message: "Staff user not found" });
     }
-
-    await Helper.deleteOne({ _id: req.params.id });
 
     audit.log({
       req,

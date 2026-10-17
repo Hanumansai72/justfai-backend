@@ -103,17 +103,6 @@ exports.updateProfile = (req, res, next) => {
   next();
 };
 
-exports.updateUserRole = (req, res, next) => {
-  const { role } = req.body;
-  const errors = [];
-
-  if (!role || !["ADMIN", "USER"].includes(String(role).toUpperCase()))
-    errors.push({ field: "role", message: "role must be 'ADMIN' or 'USER'" });
-
-  if (errors.length) return rejectWith(res, errors);
-  next();
-};
-
 // ── Device ─────────────────────────────────────────────────────
 
 const BLE_REGEX = /^([0-9A-Fa-f]{2}[:\-]){5}[0-9A-Fa-f]{2}$/;

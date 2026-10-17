@@ -29,7 +29,8 @@ const connectDB = async () => {
     socketTimeoutMS: 45000,
     maxPoolSize: 10,
   })
-    .then((conn) => {
+    .then(async (conn) => {
+      await require('./verifyAdmin')();
       cachedConnection = conn;
       console.log("MongoDB Connected Successfully");
       console.log(`Host: ${conn.connection.host}`);

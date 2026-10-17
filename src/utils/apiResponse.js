@@ -14,10 +14,6 @@ class ApiResponse {
     return this.success(res, data, message, 201);
   }
 
-  static notFound(res, message = "Resource not found") {
-    return this.error(res, message, 404);
-  }
-
   static badRequest(res, message = "Bad request") {
     return this.error(res, message, 400);
   }

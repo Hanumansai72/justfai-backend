@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 
 const { protect, authorize } = require("../middlewares/authMiddleware");
-const { authIpLimiter, loginLimiter, registerLimiter, googleLimiter, refreshLimiter, logoutLimiter, passwordResetLimiter, resetVerifyLimiter, userReadLimiter, profileWriteLimiter, userWriteLimiter, adminReadLimiter, adminWriteLimiter } = require("../security/rateLimiter");
+const { authIpLimiter, loginLimiter, registerLimiter, googleLimiter, refreshLimiter, logoutLimiter, passwordResetLimiter, resetVerifyLimiter, userReadLimiter, profileWriteLimiter, userWriteLimiter, adminReadLimiter } = require("../security/rateLimiter");
 const validate = require("../security/validate");
 
 const {
@@ -16,7 +16,6 @@ const {
   changePassword,
   getMe,
   updateProfile,
-  updateUserRole,
   getAllUsers,
   deleteAccount,
 } = require("../controllers/userController");
@@ -40,6 +39,5 @@ router.delete("/delete-account", protect, userWriteLimiter,                     
 
 // ── Admin-only Routes ──────────────────────────────────────────
 router.get("/",         protect, authorize("ADMIN"), adminReadLimiter,                         getAllUsers);
-router.put("/:id/role", protect, authorize("ADMIN"), adminWriteLimiter, validate.updateUserRole, updateUserRole);
 
 module.exports = router;

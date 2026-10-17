@@ -51,6 +51,7 @@ const userSchema = new mongoose.Schema(
       required: [true, "Role is required"],
       enum: ["ADMIN", "HELPER", "USER"],
       default: "USER",
+      immutable: true,
     },
     // Admin-controlled lifecycle state
     status: {
@@ -88,6 +89,55 @@ const userSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Only the already-provisioned admin may exist. Ordinary registration is USER-only.
+userSchema.pre('save', function () {
+  if (this.isNew && this.role === 'ADMIN') {
+    const error = new Error('Admin account creation is disabled');
+    error.statusCode = 403;
+    throw error;
+  }
+});
+userSchema.pre('insertMany', async function (documents) {
+  if (documents.some(document => document.role === 'ADMIN') || this.modelName === 'Admin') {
+    throw new Error('Admin account creation is disabled');
+  }
+});
+
+userSchema.pre(['updateOne', 'updateMany', 'findOneAndUpdate', 'replaceOne', 'findOneAndReplace'], function () {
+  const update = this.getUpdate() || {};
+  if (['replaceOne', 'findOneAndReplace'].includes(this.op) ||
+      Array.isArray(update) || update.role !== undefined || update.$set?.role !== undefined ||
+      update.$setOnInsert?.role !== undefined || update.$unset?.role !== undefined ||
+      update.$rename?.role !== undefined || Object.values(update.$rename || {}).includes('role') ||
+      (this.getOptions().upsert && (this.model.modelName === 'Admin' || this.getFilter().role === 'ADMIN'))) {
+    throw new Error('Account roles are fixed; admin account creation is disabled');
+  }
+});
+
+userSchema.pre('bulkWrite', async function (operations) {
+  // Account provisioning and credential updates use validated document saves.
+  // Bulk role changes and replacement writes could bypass those protections.
+  if (operations.some(operation => {
+    const document = operation.insertOne?.document;
+    const update = operation.updateOne || operation.updateMany;
+    return operation.replaceOne || operation.deleteOne || operation.deleteMany ||
+      (document && (document.role === 'ADMIN' || this.modelName === 'Admin')) ||
+      (update && (update.upsert || Array.isArray(update.update) ||
+        JSON.stringify(update.update).includes('"role"')));
+  })) throw new Error('Bulk admin provisioning, role changes and account deletion are disabled');
+});
+
+userSchema.pre(['deleteOne', 'deleteMany', 'findOneAndDelete'], function () {
+  if (this.model.modelName === 'Admin') throw new Error('The sole admin cannot be deleted');
+  this.where({ role: { $ne: 'ADMIN' } });
+});
+
+userSchema.index({ role: 1 }, {
+  unique: true,
+  partialFilterExpression: { role: 'ADMIN' },
+  name: 'single_admin',
+});
+
 // Encrypt password before saving (only if password exists and is modified)
 userSchema.pre("save", async function () {
   if (!this.isModified("password") || !this.password) {
@@ -121,6 +171,10 @@ userSchema.methods.getResetPasswordToken = function () {
 
   return resetToken;
 };
+
+// Customer lists always filter by role, optionally status, then sort newest first.
+userSchema.index({ role: 1, createdAt: -1, _id: -1 });
+userSchema.index({ role: 1, status: 1, createdAt: -1, _id: -1 });
 
 userSchema.plugin(require('./plugins/invalidateAdminCache'), { groups: ['users', 'staff', 'devices', 'pairing', 'support', 'firmware', 'releases', 'dashboard'] });
 

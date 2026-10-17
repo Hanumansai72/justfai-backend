@@ -497,55 +497,6 @@ exports.updateProfile = async (req, res, next) => {
 };
 
 // ─────────────────────────────────────────────
-// @desc    Update a user's role (Admin Only)
-// @route   PUT /api/users/:id/role
-// @access  Private/Admin
-// ─────────────────────────────────────────────
-exports.updateUserRole = async (req, res, next) => {
-  try {
-    const { role } = req.body;
-    const allowedRoles = ["ADMIN", "HELPER", "USER"];
-
-    if (!role || !allowedRoles.includes(String(role).toUpperCase())) {
-      return res.status(400).json({
-        success: false,
-        message: `Invalid role. Must be one of: ${allowedRoles.join(", ")}`,
-      });
-    }
-
-    const normalizedRole = String(role).toUpperCase();
-
-    const user = await User.findByIdAndUpdate(
-      req.params.id,
-      { $set: { role: normalizedRole } },
-      { new: true, select: "name email role" }
-    ).lean();
-
-    if (!user) {
-      return res.status(404).json({ success: false, message: "User not found" });
-    }
-
-    audit.log({
-      req,
-      category: "ADMIN",
-      action: "USER_ROLE_UPDATE",
-      status: "SUCCESS",
-      resource_type: "User",
-      resource_id: user._id,
-      message: `Role updated to ${role} for user ${user.email}`,
-    });
-
-    res.status(200).json({
-      success: true,
-      message: `User role updated to ${role}`,
-      data: user,
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-// ─────────────────────────────────────────────
 // @desc    Get all users (Admin Only)
 // @route   GET /api/users?page=1&limit=20&role=USER
 // @access  Private/Admin
@@ -749,6 +700,9 @@ exports.changePassword = async (req, res, next) => {
 // ─────────────────────────────────────────────
 exports.deleteAccount = async (req, res, next) => {
   try {
+    if (req.user.role !== 'USER') {
+      return res.status(403).json({ success: false, message: 'Staff accounts cannot use customer account deletion' });
+    }
     const { password } = req.body;
 
     const user = await User.findById(req.user._id).select("+password");
@@ -787,6 +741,7 @@ exports.deleteAccount = async (req, res, next) => {
     // Parallel delete of all associated personal records
     await Promise.all([
       SavedAddress.deleteMany({ user_id: user._id }),
+        require('../models/Ride.model').deleteMany({ user_id: user._id }),
       Notification.deleteMany({ user_id: user._id }),
       User.deleteOne({ _id: user._id }),
     ]);

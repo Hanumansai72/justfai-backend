@@ -88,7 +88,6 @@ const findDeviceByIdentifier = (Model, identifier, selectFields = "", populate =
 };
 
 module.exports = {
-  DEVICE_SECRET,
   formatBleAddress,
   generateRandomCode,
   generateNumericOtp,
