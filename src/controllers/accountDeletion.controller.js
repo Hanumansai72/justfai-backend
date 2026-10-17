@@ -75,7 +75,7 @@ exports.deleteAccount = async (req, res, next) => {
     const user = await verifyPassword(req, res);
     if (!user) return;
     if (await Device.exists({ linked_to: user._id })) return rejectLinked(res);
-    if (!/^\d{6}$/.test(String(req.body?.otp || ''))) return res.status(400)
+    if (typeof req.body?.otp !== 'string' || !/^\d{6}$/.test(req.body.otp)) return res.status(400)
       .json({ success: false, message: 'Enter the six-digit deletion code from your email.' });
     const challenge = await User.findOneAndUpdate({ _id: user._id, status: 'active',
       deletion_otp_ready: true, deletion_otp_expires: { $gt: new Date() }, deletion_otp_attempts: { $lt: 5 },

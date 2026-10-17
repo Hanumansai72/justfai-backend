@@ -359,7 +359,7 @@ exports.unlinkDevice = async (req, res, next) => {
       if (secret && safeCompare(device.device_hash, generateDeviceHash(device.BLE_ADDRESS, pairing_code, secret))) isHashValid = true;
     }
 
-    if (otp_code && device.unlink_otp) {
+    if (typeof otp_code === 'string' && /^\d{6}$/.test(otp_code) && device.unlink_otp) {
       const fresh = device.unlink_otp_expires && device.unlink_otp_expires > new Date();
       if (fresh && safeCompare(device.unlink_otp, hashString(String(otp_code)))) isOtpValid = true;
     }
@@ -375,8 +375,16 @@ exports.unlinkDevice = async (req, res, next) => {
      * OPTIMISATION: single atomic $set + $unset operation.
      * No need to load the full document, mutate fields, then save.
      */
+    const unlinkFilter = { _id: device._id, linked_to: req.user._id,
+      is_paired: true, device_hash: device.device_hash };
+    if (!isHashValid) {
+      // Recheck the verified challenge during the write: a resend or expiry
+      // between reading the device and releasing it must reject this request.
+      unlinkFilter.unlink_otp = device.unlink_otp;
+      unlinkFilter.unlink_otp_expires = { $gt: new Date() };
+    }
     const result = await Device.updateOne(
-      { _id: device._id, linked_to: req.user._id, device_hash: device.device_hash },
+      unlinkFilter,
       {
         $set:   { is_paired: false, linked_to: null, unlink_date: new Date(), unlink_by: req.user._id },
         $unset: { device_hash: "", pairing_code: "", unlink_otp: "", unlink_otp_expires: "" },
