@@ -149,7 +149,7 @@ Paths in this section are relative to the named repository. Other dirty mobile/f
 - `src/components/common/DeviceImage.jsx`: reusable responsive image/fallback.
 - `src/pages/EarlyAccessPage.jsx`: responsive device images and Retry-After form state.
 - `src/pages/ProductPage.jsx`, `AboutUsPage.jsx`, `DownloadPage.jsx`, `HomePage.jsx`: same authentic image component.
-- `test/interest-harness.html`: isolated development-only browser fixture; not a production Vite entry point.
+- The temporary `test/interest-harness.html` browser fixture was removed after verification; the captured evidence remains below.
 
 ### Staff website
 
