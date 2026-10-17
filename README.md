@@ -180,6 +180,16 @@ npm start
 
 ---
 
+## Admin audit trail
+
+- Records staff login success/failure, blocked login, authenticated admin API reads and changes, and explicit logout. Controller events are kept once per request; uncovered operations receive an HTTP action record.
+- `POST /api/admin/logout` records the staff identity before the browser clears its session and clears backend authentication cookies. The current refresh token is removed if supplied.
+- `POST /api/admin/activity` accepts only page-view and audit-export events for known portal paths. These events are marked as client-reported; the actor comes from verified authentication.
+- `GET /api/admin/audit-logs?scope=admin` and `/api/admin/audit-logs/stats?scope=admin` show admin activity. Omit `scope` for all activity. Search includes staff name/email, employee ID, action, IP, and the hashed session reference.
+- Records save directly to MongoDB with Vercel `waitUntil`; no Redis worker is needed for new records. The legacy audit worker can still drain old jobs on a persistent server. Failures are reported as `[Audit] PERSIST_FAILED` in server logs.
+- Passwords, raw tokens, request bodies, and query values are not added by automatic request auditing. Actor snapshots retain staff identity even when a Helper cannot be populated from the User collection.
+- Deploy both backend and admin changes. Activity never saved by older versions cannot be reconstructed. Closing a browser tab does not send a logout event.
+
 ## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

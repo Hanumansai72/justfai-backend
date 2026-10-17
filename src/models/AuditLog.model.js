@@ -16,7 +16,7 @@ const auditLogSchema = new mongoose.Schema(
     status:    { type: String, enum: ["SUCCESS", "FAILURE", "BLOCKED", "WARNING"], default: "SUCCESS" },
     resource_type: {
       type: String,
-      enum: ["User", "Device", "Firmware", "Address", "System"],
+      enum: ["User", "Helper", "Device", "Firmware", "AppRelease", "Address", "System"],
       default: "System",
     },
     resource_id: { type: String, default: null },
@@ -46,6 +46,7 @@ const auditLogSchema = new mongoose.Schema(
 auditLogSchema.index({ category: 1, status: 1, createdAt: -1 });
 auditLogSchema.index({ user_id: 1, createdAt: -1 });
 auditLogSchema.index({ ip_address: 1, createdAt: -1 });
+auditLogSchema.index({ 'metadata.source': 1, createdAt: -1 });
 
 // Optional: auto-expire after 90 days (uncomment for compliance-free deployments)
 // auditLogSchema.index({ createdAt: 1 }, { expireAfterSeconds: 7_776_000 });

@@ -41,7 +41,7 @@ JustRide Backend is an enterprise-grade IoT fleet management, rider service, sup
 - **Support Ticketing System**: Multi-actor tickets for riders and customer care helpers, with diagnostics attachment.
 - **Enterprise Staff Hierarchy**: Roles (`ADMIN`, `HELPER`, `USER`), staff performance tracking, and ticket assignments.
 - **Security & Forensic Audit Logging**: Immutable audit trails, IP rate-limiting, MongoDB operator sanitization, and XSS filtering.
-- **Asynchronous Background Processing**: BullMQ job queues backed by Redis with graceful fallback for notifications and audit persistence.
+- **Asynchronous Background Processing**: Redis/BullMQ notification workers and direct MongoDB audit writes tracked with Vercel `waitUntil`.
 
 ```mermaid
 graph TD
@@ -114,7 +114,6 @@ c:\Hanumansai_Projects\Justride\Backend\
     │   ├── FirmwareHistory.model.js # Device-to-Firmware installation history
     │   └── AuditLog.model.js     # Immutable system security event audit logs
     ├── queues/                   # BullMQ Job queue producers
-    │   ├── audit.queue.js        # Async audit log creation queue
     │   └── notification.queue.js # Asynchronous push/email notification queue
     ├── routes/                   # Express Router endpoints
     │   ├── adminRoutes.js        # Admin & staff management routes (/api/admin)
@@ -139,7 +138,7 @@ c:\Hanumansai_Projects\Justride\Backend\
     │   └── tokenManager.js       # JWT Access/Refresh tokens & secure cookies
     └── workers/                  # Background worker consumers
         ├── index.js              # Worker lifecycle manager (starts BullMQ listeners)
-        ├── audit.worker.js       # Consumer writing audit logs to MongoDB
+        ├── audit.worker.js       # Drains legacy queued audit records
         └── notification.worker.js# Consumer dispatching notifications
 ```
 
@@ -229,7 +228,7 @@ c:\Hanumansai_Projects\Justride\Backend\
 - **Purpose**: Middleware that analyzes request paths and parameters for suspicious patterns (SQL/NoSQL injection signatures, path traversals). Logs security alerts.
 
 #### [`src/security/auditLogger.js`](file:///c:/Hanumansai_Projects/Justride/Backend/src/security/auditLogger.js)
-- **Purpose**: Utility helper to log high-importance domain actions (e.g. user banned, device blocked, firmware published) either via the async queue or directly into the `AuditLog` collection.
+- **Purpose**: Writes domain actions directly to `AuditLog` and registers their completion with Vercel `waitUntil`. Staff snapshots and a SHA-256 access-token reference identify the actor/session without storing credentials.
 
 ---
 
@@ -272,7 +271,7 @@ All models are registered in [`src/models/index.js`](file:///c:/Hanumansai_Proje
 | [`Notification.model.js`](file:///c:/Hanumansai_Projects/Justride/Backend/src/models/Notification.model.js) | `notifications` | In-app/Push notifications. Fields: `recipientId`, `title`, `message`, `type` (`'SYSTEM'`, `'DEVICE'`, `'SECURITY'`, `'PROMOTION'`), `isRead`, `metadata`. |
 | [`FirmwareRelease.model.js`](file:///c:/Hanumansai_Projects/Justride/Backend/src/models/FirmwareRelease.model.js) | `firmwarereleases` | OTA firmware versions. Fields: `version` (semver), `channel` (`'STABLE'`, `'BETA'`, `'CANARY'`), `binaryUrl`, `checksumSHA256`, `targetHardwareModels`, `releaseNotes`, `isActive`. |
 | [`FirmwareHistory.model.js`](file:///c:/Hanumansai_Projects/Justride/Backend/src/models/FirmwareHistory.model.js) | `firmwarehistories` | Audit log of OTA updates installed on devices. Fields: `deviceId`, `previousVersion`, `installedVersion`, `installedAt`, `status` (`'SUCCESS'`, `'FAILED'`). |
-| [`AuditLog.model.js`](file:///c:/Hanumansai_Projects/Justride/Backend/src/models/AuditLog.model.js) | `auditlogs` | Immutable audit records. Fields: `actorId`, `actorModel`, `action`, `resourceType`, `resourceId`, `diff`, `ipAddress`, `userAgent`, `timestamp`. |
+| [`AuditLog.model.js`](file:///c:/Hanumansai_Projects/Justride/Backend/src/models/AuditLog.model.js) | `auditlogs` | Audit records: `user_id`, `category`, `action`, `status`, `resource_type`, `resource_id`, `ip_address`, `user_agent`, `createdAt`, and `metadata` (actor snapshot, source, hashed session reference). |
 
 ---
 
@@ -290,8 +289,7 @@ All models are registered in [`src/models/index.js`](file:///c:/Hanumansai_Proje
 ### 3.8 `src/queues/` & 3.9 `src/workers/`
 
 Background task processing powered by **BullMQ**:
-- **[`src/queues/audit.queue.js`](file:///c:/Hanumansai_Projects/Justride/Backend/src/queues/audit.queue.js)**: Produces audit logging tasks into BullMQ.
-- **[`src/workers/audit.worker.js`](file:///c:/Hanumansai_Projects/Justride/Backend/src/workers/audit.worker.js)**: Consumes audit tasks and persists records into MongoDB without blocking HTTP requests.
+- **[`src/workers/audit.worker.js`](file:///c:/Hanumansai_Projects/Justride/Backend/src/workers/audit.worker.js)**: Drains audit jobs queued by earlier deployments. New audit records do not require this worker or Redis.
 - **[`src/queues/notification.queue.js`](file:///c:/Hanumansai_Projects/Justride/Backend/src/queues/notification.queue.js)**: Produces notification jobs (Push/Email/In-App).
 - **[`src/workers/notification.worker.js`](file:///c:/Hanumansai_Projects/Justride/Backend/src/workers/notification.worker.js)**: Consumes notification jobs and dispatches alerts.
 - **[`src/workers/index.js`](file:///c:/Hanumansai_Projects/Justride/Backend/src/workers/index.js)**: Initializes and monitors all active background workers.
@@ -364,7 +362,7 @@ sequenceDiagram
 
 ## 6. Background Jobs & Workers Architecture
 
-Non-blocking operations (e.g. Audit Logging, Email/Push Notifications) are dispatched through BullMQ job queues:
+Notification jobs use BullMQ:
 
 ```
 [ HTTP Controller ]
@@ -373,13 +371,13 @@ Non-blocking operations (e.g. Audit Logging, Email/Push Notifications) are dispa
  [ BullMQ Queue (Redis) ]
         │
         ▼ (Worker Consumer)
- [ src/workers/ (audit.worker / notification.worker) ]
+ [ src/workers/notification.worker ]
         │
         ▼
  [ MongoDB / Cloudinary / External Gateway ]
 ```
 
-- **Graceful Fallback**: If Redis is not available in local development, queues operate safely in-memory so development proceeds without failure.
+Audit records use `auditLogger -> MongoDB AuditLog`, with `waitUntil` keeping the write alive after the response on Vercel. No audit producer queue is used. Persistence failures emit `[Audit] PERSIST_FAILED` with an error type, without request bodies or secrets.
 
 ---
 

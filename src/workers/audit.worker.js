@@ -1,6 +1,6 @@
 /**
  * workers/audit.worker.js
- * BullMQ Consumer for Audit Log Jobs.
+ * Drain legacy BullMQ audit jobs. New records persist through auditLogger directly.
  */
 const { Worker } = require("bullmq");
 const { redisConfig } = require("../config/redis");

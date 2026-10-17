@@ -1,9 +1,11 @@
 /**
  * security/auditLogger.js
- * Centralised audit logging utility — fire-and-forget, never blocks a request.
+ * Persist audit records in the background, including on Vercel without a queue worker.
  */
 const AuditLog = require("../models/AuditLog.model");
-const { enqueueAuditLog } = require("../queues/audit.queue");
+const { waitUntil } = require('@vercel/functions');
+const { createHash } = require('crypto');
+const safeRequestPath = require('../utils/safeRequestPath');
 
 /** Extracts real client IP (handles proxies / load balancers) */
 const getClientIp = (req) =>
@@ -12,7 +14,7 @@ const getClientIp = (req) =>
   "unknown";
 
 /**
- * log(options) — non-blocking message queue audit log dispatch.
+ * log(options) — return the persistence task so callers can track completion.
  */
 const log = ({
   category = "SYSTEM",
@@ -25,9 +27,16 @@ const log = ({
   message = "",
   metadata = {},
 } = {}) => {
-  const resolvedUserId = user_id ?? req?.user?._id ?? null;
+  const actor = req?.auditActor || req?.user;
+  const resolvedUserId = user_id ?? actor?._id ?? null;
+  const isStaff = ['ADMIN', 'HELPER'].includes(actor?.role);
+  const path = req ? safeRequestPath(req) : null;
+  const source = path === '/api/admin' || path?.startsWith('/api/admin/') || isStaff ? 'admin' : 'customer';
+  const token = req?.headers?.authorization?.replace(/^Bearer\s+/i, '') || req?.cookies?.accessToken;
+  const sessionId = req?.auditSessionId || (isStaff && token ? createHash('sha256').update(token).digest('hex') : null);
+  if (req) req.auditLogged = true;
 
-  enqueueAuditLog({
+  const task = AuditLog.create({
     category,
     action,
     status,
@@ -37,8 +46,20 @@ const log = ({
     ip_address: req ? getClientIp(req) : null,
     user_agent: req?.headers?.["user-agent"] || null,
     message,
-    metadata,
-  }).catch(() => {});
+    metadata: {
+      ...metadata,
+      ...(req && { source, method: req.method, path }),
+      ...(sessionId && { session_id: sessionId }),
+      ...(actor && { actor: { id: String(actor._id), name: actor.name, email: actor.email,
+        role: actor.role, employee_id: actor.employee_id || null } }),
+    },
+  }).catch(error => {
+    // Never print request bodies, credentials, or database connection strings.
+    console.error('[Audit] PERSIST_FAILED', error.name || 'Error');
+    return null;
+  });
+  waitUntil(task);
+  return task;
 };
 
 module.exports = { log, getClientIp };

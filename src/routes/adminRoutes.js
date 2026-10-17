@@ -15,6 +15,8 @@ const { authIpLimiter, loginLimiter, staffLimiter, uploadLimiter, deviceRegister
 // Auth & Staff Controllers
 const {
   adminLogin,
+  adminLogout,
+  recordAdminActivity,
   getAdminProfile,
   updateAdminCredentials,
   createHelperUser,
@@ -45,6 +47,8 @@ router.post("/login", authIpLimiter, loginLimiter, adminLogin);
 
 // ── Protected Staff Routes (ADMIN & HELPER) ─────────────────────
 router.use(protect, staffLimiter);
+router.post('/logout', authorize('ADMIN', 'HELPER'), adminLogout);
+router.post('/activity', authorize('ADMIN', 'HELPER'), recordAdminActivity);
 
 // Profile & Self Credential Updates
 router.get("/me",              authorize("ADMIN", "HELPER"), getAdminProfile);

@@ -17,6 +17,7 @@ const {
   generateRefreshToken,
   hashToken,
   setTokenCookies,
+  clearTokenCookies,
 } = require("../../utils/tokenManager");
 
 /** Safe unified response formatter for both Admin and Helper accounts */
@@ -88,6 +89,7 @@ exports.adminLogin = async (req, res, next) => {
       if (account) isHelper = true;
     }
 
+    req.auditActor = account;
     if (!account || !(await account.matchPassword(password))) {
       audit.log({
         req, category: "ADMIN", action: "STAFF_LOGIN_FAILED", status: "FAILURE",
@@ -101,6 +103,9 @@ exports.adminLogin = async (req, res, next) => {
     }
 
     if (account.status && account.status !== "active") {
+      audit.log({ req, category: 'ADMIN', action: 'STAFF_LOGIN_BLOCKED', status: 'BLOCKED',
+        resource_type: isHelper ? 'Helper' : 'User', resource_id: account._id,
+        message: `Staff login denied: account is ${account.status}` });
       return res.status(403).json({
         success: false,
         message: `Account is ${account.status}${account.status_reason ? `: ${account.status_reason}` : ". Contact management."}`,
@@ -139,6 +144,7 @@ exports.adminLogin = async (req, res, next) => {
     );
 
     setTokenCookies(res, accessToken, refreshToken);
+    req.auditSessionId = hashToken(accessToken);
 
     audit.log({
       req,
@@ -165,6 +171,41 @@ exports.adminLogin = async (req, res, next) => {
   } catch (error) {
     next(error);
   }
+};
+
+// Record logout while the authenticated staff identity is still available.
+exports.adminLogout = async (req, res, next) => {
+  try {
+    const refreshToken = req.cookies?.refreshToken;
+    if (refreshToken) {
+      const Model = req.user.role === 'ADMIN' ? User : Helper;
+      await Model.updateOne({ _id: req.user._id }, {
+        $pull: { refresh_tokens: { token: hashToken(refreshToken) } },
+      });
+    }
+    clearTokenCookies(res);
+    audit.log({ req, category: 'ADMIN', action: req.user.role === 'ADMIN' ? 'ADMIN_LOGOUT' : 'HELPER_LOGOUT',
+      resource_type: req.user.role === 'ADMIN' ? 'User' : 'Helper', resource_id: req.user._id,
+      message: `${req.user.role === 'ADMIN' ? 'Admin' : 'Helper'} ${req.user.email} logged out` });
+    return res.status(200).json({ success: true, message: 'Logged out successfully' });
+  } catch (error) { next(error); }
+};
+
+// Client-only actions (navigation and CSV export); the actor always comes from auth.
+exports.recordAdminActivity = (req, res) => {
+  const { event, path } = req.body || {};
+  const allowedPages = /^\/(dashboard|users|interested-users|helpers|devices|firmware|app-releases|audit-logs|support|tickets|notifications)(\/[a-zA-Z0-9_-]+)*$/;
+  if (!['PAGE_VIEW', 'AUDIT_EXPORT', 'AUDIT_DETAIL_EXPORT'].includes(event) || typeof path !== 'string' ||
+      path.length > 200 || !allowedPages.test(path) || (event === 'AUDIT_EXPORT' && path !== '/audit-logs') ||
+      (event === 'AUDIT_DETAIL_EXPORT' && !/^\/audit-logs\/[a-f\d]{24}$/i.test(path))) {
+    return res.status(400).json({ success: false, message: 'Invalid admin activity' });
+  }
+  audit.log({ req, category: 'ADMIN', action: `ADMIN_${event}`,
+    resource_type: 'System', resource_id: path,
+    message: event === 'PAGE_VIEW' ? `Opened admin page ${path}` :
+      event === 'AUDIT_EXPORT' ? 'Exported the displayed audit logs as CSV' : `Exported audit event ${path} as JSON`,
+    metadata: { page: path, client_reported: true } });
+  return res.status(200).json({ success: true });
 };
 
 // ─────────────────────────────────────────────

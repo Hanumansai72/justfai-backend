@@ -55,6 +55,7 @@ app.use(
 // ─────────────────────────────────────────────────────────────
 // Secondary IP ceiling; endpoint-specific policies run after authentication.
 // ─────────────────────────────────────────────────────────────
+app.use(securityLogger);
 app.use(generalLimiter);
 
 // ─────────────────────────────────────────────────────────────
@@ -75,11 +76,6 @@ app.use(cookieParser());
 // ─────────────────────────────────────────────────────────────
 app.use(sanitizeMongo);
 app.use(sanitizeXss);
-
-// ─────────────────────────────────────────────────────────────
-// Security Audit Logger
-// ─────────────────────────────────────────────────────────────
-app.use(securityLogger);
 
 // ─────────────────────────────────────────────────────────────
 // Ensure Database Connected (Critical for Serverless/Cloud Lambdas)
