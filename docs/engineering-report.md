@@ -13,6 +13,12 @@ after provider acceptance. Installing the official background helper also surfac
 audit notices in existing dependencies (10 advisories, including a critical proxy-addr
 advisory); dependency remediation was not bundled into this email-flow change.
 
+Consent follow-up: the interest form now requires an unchecked-by-default email consent
+checkbox before submission. The API requires explicit boolean true and the queue refuses
+to send previously queued records without saved consent. Interest buttons now say
+"I'm Interested"; admin shows consent as Confirmed or Not confirmed. Consent confirmation
+means the submitted checkbox choice, not proof of email address ownership.
+
 ## 1. Architecture and API inventory
 
 - Express 5 / Mongoose backend, MongoDB persistence, existing Redis REST/TCP clients, BullMQ queues, Socket.IO chat, Cloudinary images and R2 release downloads.
@@ -91,7 +97,7 @@ Both homepage device images loaded successfully from the 480px WebP sources in t
 
 | Check | Result and limits |
 |---|---|
-| `npm test` backend | 46 passed, 0 failed after the email-queue follow-up; live Redis case skipped in normal suite |
+| `npm test` backend | 48 passed, 0 failed after queue and required-consent follow-ups; live Redis case skipped in normal suite |
 | Opt-in `RUN_REDIS_TESTS=true node --test test/rate-limit-redis.integration.test.js` | Passed against configured Redis: 8 concurrent operations through two independent clients allow exactly 3; 200ms window expires. Random `rl:test:` keys expire automatically |
 | Staff `node --test test/client.test.mjs` | 3 passed: duplicate GETs, 429 preserving session/no replay, AbortSignal forwarding |
 | Existing Flutter suite | 83 tests passed, including existing GPS/navigation/ride-related unit/widget coverage |

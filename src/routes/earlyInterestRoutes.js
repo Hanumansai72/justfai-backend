@@ -9,17 +9,20 @@ const { scheduleInterestEmails } = require('../queues/interestEmail.queue');
 const router = express.Router();
 const intents = ['Yes', 'Maybe', 'I want to know the price first'];
 const priceRanges = EarlyInterest.schema.path('priceRange').enumValues;
-const emailConsentText = 'I agree to receive future JustRide emails about product updates, preorder availability and early-access opportunities.';
+const emailConsentText = 'I agree to receive JustRide emails, including my interest confirmation, product updates and availability announcements.';
 const optionalText = (value, max) => typeof value === 'string' && value.trim().length <= max;
 
 router.post('/', interestLimiter, async (req, res, next) => {
   try {
     const { name, email, city, purchaseIntent = '', priceRange = '', notes = '', website = '', emailConsent = false } = req.body || {};
     if (website) return ApiResponse.created(res, null, 'You are on the list');
+    if (emailConsent !== true) {
+      return ApiResponse.badRequest(res, 'Please confirm your email consent before registering your interest.');
+    }
     if (typeof name !== 'string' || name.trim().length < 2 || name.length > 100 ||
         typeof email !== 'string' || !validator.isEmail(email.trim()) || email.length > 254 ||
         typeof city !== 'string' || city.trim().length < 2 || city.length > 100 ||
-        !optionalText(notes, 1000) || !priceRanges.includes(priceRange) || typeof emailConsent !== 'boolean' ||
+        !optionalText(notes, 1000) || !priceRanges.includes(priceRange) ||
         (purchaseIntent && !intents.includes(purchaseIntent))) {
       return ApiResponse.badRequest(res, 'Please check the form details and try again.');
     }
@@ -31,7 +34,7 @@ router.post('/', interestLimiter, async (req, res, next) => {
       name: name.trim(), email: normalizedEmail, city: city.trim(), purchaseIntent, priceRange, notes: notes.trim(),
       emailConsent,
       confirmationEmailStatus: 'queued',
-      ...(emailConsent && { emailConsentAt: new Date(), emailConsentText }),
+      emailConsentAt: new Date(), emailConsentText,
     });
     scheduleInterestEmails(res);
     return ApiResponse.created(res, { confirmationEmailStatus: 'queued' }, 'Your details are saved. Your confirmation email is queued.');

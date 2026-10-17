@@ -80,27 +80,28 @@ test('Hostinger payload, safe failures, throttling and save-before-queue', async
   t.after(() => new Promise(resolve => server.close(resolve)));
   const submit = (fields = {}) => httpFetch(`http://127.0.0.1:${server.address().port}/`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: 'Rider', email: 'rider@example.com', city: 'Hyderabad', ...fields }),
+    body: JSON.stringify({ name: 'Rider', email: 'rider@example.com', city: 'Hyderabad', emailConsent: true, ...fields }),
   });
   assert.equal((await submit({ emailConsent: 'false' })).status, 400);
   assert.equal((await submit()).status, 201);
   assert.ok(saved);
   assert.equal(records.get('rider@example.com').confirmationEmailStatus, 'queued');
   assert.equal(queued.mock.callCount(), 1);
-  assert.equal(records.get('rider@example.com').emailConsent, false);
-  assert.equal(records.get('rider@example.com').emailConsentAt, undefined);
+  assert.equal(records.get('rider@example.com').emailConsent, true);
+  assert.ok(records.get('rider@example.com').emailConsentAt instanceof Date);
   assert.equal((await submit({ emailConsent: true })).status, 200);
-  assert.equal(records.get('rider@example.com').emailConsent, false); // Duplicates cannot change another person's consent.
+  assert.equal(records.get('rider@example.com').emailConsent, true);
   assert.equal(service.sendEmail.mock.callCount(), 0);
   assert.equal(queued.mock.callCount(), 1);
   assert.equal((await submit({ email: 'subscriber@example.com', emailConsent: true, emailConsentAt: 'untrusted' })).status, 201);
   const subscriber = records.get('subscriber@example.com');
   assert.ok(subscriber.emailConsentAt instanceof Date);
-  assert.ok(subscriber.emailConsentText.startsWith('I agree to receive future JustRide emails'));
+  assert.ok(subscriber.emailConsentText.startsWith('I agree to receive JustRide emails'));
 
   claim.mock.mockImplementation(async () => ({}));
   request.mock.mockImplementation(async (message) => ({ accepted: [message.to] }));
   const sendCount = request.mock.callCount();
+  records.get('rider@example.com').emailConsent = false; // A legacy record without opt-in.
   assert.equal((await sendInterestUpdate(email)).code, 'CONSENT_REQUIRED');
   assert.equal(request.mock.callCount(), sendCount);
   assert.equal((await sendInterestUpdate({ ...email, to: 'subscriber@example.com' })).code, 'SENT');

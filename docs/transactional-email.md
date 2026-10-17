@@ -37,9 +37,13 @@ Duplicate addresses are trimmed/lowercased, checked before insertion, and protec
 existing unique email index against simultaneous inserts. Duplicate submissions never
 queue a new confirmation or change the saved consent. Delivery status and safe failure codes are recorded on the interest record and
 shown on the admin Interested Users page. A failed confirmation leaves the record intact.
-The optional future-email checkbox defaults to unchecked. New records save `emailConsent`
-as a strict boolean; opted-in records also save the server timestamp and displayed wording
-in `emailConsentAt` and `emailConsentText`. Older records without consent are not opted in.
+The email-consent checkbox defaults to unchecked and is required to register interest.
+The form button stays disabled until checked. The API rejects missing consent, false,
+or string values before saving or scheduling any email; it requires boolean `true`.
+New records save `emailConsent`, the server timestamp and displayed wording in
+`emailConsentAt` and `emailConsentText`. The queue independently checks the saved consent
+before SMTP. An older queued record without consent is marked `CONSENT_REQUIRED` without
+sending; its existing choice is not changed. Older records without consent are not opted in.
 Duplicate public submissions do not change saved consent. Future product/preorder messages
 must use `sendInterestUpdate({to, subject, html, text})`, which checks saved consent before
 calling the same SMTP service. Missing consent or a failed database lookup prevents sending.

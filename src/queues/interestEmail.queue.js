@@ -15,8 +15,9 @@ async function drainInterestEmails(limit = 3) {
     if (!interest) break;
     // Atomic queued -> sending means concurrent workers cannot send the same record.
     // Never reclaim 'sending': a crashed SMTP call may already have delivered the email.
-    const delivery = await emailService.sendEmail({ to: interest.email,
-      ...interestConfirmation(interest.name, interest.emailConsent === true) });
+    const delivery = interest.emailConsent === true
+      ? await emailService.sendEmail({ to: interest.email, ...interestConfirmation(interest.name, true) })
+      : { sent: false, code: 'CONSENT_REQUIRED' };
     const delay = { RECIPIENT_LIMIT: 15 * 60 * 1000, HOURLY_LIMIT: 60 * 60 * 1000, NOT_CONFIGURED: 5 * 60 * 1000 }[delivery.code];
     await EarlyInterest.updateOne({ _id: interest._id, confirmationEmailStatus: 'sending' }, { $set: {
       confirmationEmailStatus: delivery.sent ? 'sent' : delay ? 'queued' : 'failed',

@@ -18,7 +18,7 @@ test('interest saves supported price ranges, rejects invalid input and accepts o
   t.after(() => new Promise(resolve => server.close(resolve)));
   const submit = fields => fetch(`http://127.0.0.1:${server.address().port}/`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: 'Test Rider', email: 'test@example.com', city: 'Hyderabad', ...fields }),
+    body: JSON.stringify({ name: 'Test Rider', email: 'test@example.com', city: 'Hyderabad', emailConsent: true, ...fields }),
   });
   for (const invalid of ['8999-9999', { value: '4999-5999' }]) {
     assert.equal((await submit({ priceRange: invalid })).status, 400);
