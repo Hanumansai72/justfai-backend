@@ -44,6 +44,7 @@ exports.getLatestFirmware = async (req, res, next) => {
     const cacheKey = `firmware:latest:${device_type || "all"}:${channel}`;
 
     const latestRelease = await cacheService.getOrSet(
+      'firmware',
       cacheKey,
       async () => {
         const filter = { is_active: true, channel };
@@ -229,9 +230,6 @@ exports.createFirmwareRelease = async (req, res, next) => {
       release_date: new Date(),
       is_active: true,
     });
-
-    // Invalidate Redis firmware caches
-    await cacheService.delPattern("firmware:*");
 
     audit.log({
       req, category: "FIRMWARE", action: "FIRMWARE_RELEASE_CREATE", status: "SUCCESS",

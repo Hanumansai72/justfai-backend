@@ -51,4 +51,6 @@ const deviceSchema = new mongoose.Schema(
  */
 deviceSchema.index({ linked_to: 1, is_paired: 1 });
 
+deviceSchema.plugin(require('./plugins/invalidateAdminCache'), { groups: ['devices', 'pairing', 'support', 'dashboard'] });
+
 module.exports = mongoose.model("Device", deviceSchema);

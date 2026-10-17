@@ -77,4 +77,6 @@ const firmwareReleaseSchema = new mongoose.Schema(
 // Compound: most common list query — active stable releases, newest first
 firmwareReleaseSchema.index({ channel: 1, is_active: 1, release_date: -1 });
 
+firmwareReleaseSchema.plugin(require('./plugins/invalidateAdminCache'), { groups: ['firmware'] });
+
 module.exports = mongoose.model("FirmwareRelease", firmwareReleaseSchema);

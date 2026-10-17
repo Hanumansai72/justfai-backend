@@ -15,13 +15,14 @@ const FirmwareHistory = require("../../models/FirmwareHistory.model");
 const cacheService    = require("../../services/cache.service");
 
 // ─────────────────────────────────────────────
-// @desc    Admin dashboard statistics (Cached 60s in Redis)
+// @desc    Admin dashboard statistics (30s cache, invalidated by model writes)
 // @route   GET /api/admin/dashboard/stats
 // @access  Private (ADMIN or HELPER)
 // ─────────────────────────────────────────────
 exports.getDashboardStats = async (req, res, next) => {
   try {
     const stats = await cacheService.getOrSet(
+      'dashboard',
       "admin:dashboard:stats",
       async () => {
         const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
@@ -128,7 +129,7 @@ exports.getDashboardStats = async (req, res, next) => {
           recent_pairings: formattedRecentPairings,
         };
       },
-      60 // 60 seconds TTL
+      30
     );
 
     res.status(200).json({

@@ -86,4 +86,6 @@ const appReleaseSchema = new mongoose.Schema(
 
 appReleaseSchema.index({ platform: 1, channel: 1, is_active: 1, build_number: -1 });
 
+appReleaseSchema.plugin(require('./plugins/invalidateAdminCache'), { groups: ['releases'] });
+
 module.exports = mongoose.model("AppRelease", appReleaseSchema);

@@ -127,4 +127,6 @@ helperSchema.methods.matchPassword = async function (enteredPassword) {
 // Compound index for active staff by role & status
 helperSchema.index({ role: 1, status: 1 });
 
+helperSchema.plugin(require('./plugins/invalidateAdminCache'), { groups: ['staff', 'support'] });
+
 module.exports = mongoose.model("Helper", helperSchema);

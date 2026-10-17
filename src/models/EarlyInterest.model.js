@@ -18,4 +18,6 @@ const earlyInterestSchema = new mongoose.Schema({
 
 earlyInterestSchema.index({ confirmationEmailStatus: 1, confirmationEmailNextAttemptAt: 1, createdAt: 1 });
 
+earlyInterestSchema.plugin(require('./plugins/invalidateAdminCache'), { groups: ['interest'] });
+
 module.exports = mongoose.model('EarlyInterest', earlyInterestSchema);

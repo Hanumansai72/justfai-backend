@@ -116,4 +116,6 @@ notificationSchema.index({ user_id: 1, is_read: 1, createdAt: -1 });
 notificationSchema.index({ target_audience: 1, createdAt: -1 });
 notificationSchema.index({ type: 1, createdAt: -1 });
 
+notificationSchema.plugin(require('./plugins/invalidateAdminCache'), { groups: ['notifications'] });
+
 module.exports = mongoose.model("Notification", notificationSchema);

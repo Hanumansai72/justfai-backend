@@ -122,6 +122,8 @@ userSchema.methods.getResetPasswordToken = function () {
   return resetToken;
 };
 
+userSchema.plugin(require('./plugins/invalidateAdminCache'), { groups: ['users', 'staff', 'devices', 'pairing', 'support', 'firmware', 'releases', 'dashboard'] });
+
 module.exports = mongoose.model("User", userSchema);
 
 

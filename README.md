@@ -184,6 +184,16 @@ npm start
 
 Admin list endpoints default to 10 records and cap requested page sizes at 10. Lists use newest-first ordering with an ID tie-breaker; pairing history uses the pairing date. Interested Users also returns 10 per page. Staff totals cover the full filtered directory, and notification categories are filtered before pagination.
 
+## Admin Redis cache
+
+- Uses the existing Redis TCP configuration (`ENABLE_REDIS=true`, `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD`, and `REDIS_TLS`). No frontend Redis credentials are needed.
+- Dashboard statistics and admin lists for users, staff, devices, pairing, firmware, app releases, support, notifications, and Interested Users cache successful responses for 30 seconds. List keys include the authenticated staff ID, role, path, and all query filters/pages; authentication, authorization, and rate limits run before cache access.
+- Model hooks invalidate affected cache groups after creates, updates, deletes, and bulk writes, including writes from customer/mobile APIs and workers. User/device changes also invalidate related populated lists and dashboard statistics. Partial batch failures invalidate too; empty queue polls do not.
+- Invalidation rotates a shared Redis revision. The next fetch rebuilds the response from MongoDB, including totals and newest-first pagination. Atomic revision checks prevent an older in-flight database read from caching stale data after a write. The portal updates on its next fetch; this does not add a live push channel.
+- List responses report `X-Cache: HIT`, `MISS`, or `BYPASS` and use `Cache-Control: private, no-store` so browsers/proxies cannot retain outdated responses. Authentication/session data, individual detail endpoints, health checks, and audit logs are not cached. Audit logging and Interested Users email queue scheduling still run on cache hits.
+- Cache Redis commands and cold-start invalidation waits are bounded at 750 ms; unavailable Redis falls back to MongoDB without failing business writes. Failed invalidations are retried before this process reads that cache group again. If invalidation cannot reach Redis, another process can retain its previous admin snapshot until the 30-second TTL expires. Direct database edits outside these model hooks also rely on TTL expiry.
+- Public device firmware retains its existing 600-second TTL and now shares firmware write invalidation. Cache keys use a new namespace; older cache entries expire naturally.
+
 ## Admin audit trail
 
 - Records staff login success/failure, blocked login, authenticated admin API reads and changes, and explicit logout. Controller events are kept once per request; uncovered operations receive an HTTP action record.

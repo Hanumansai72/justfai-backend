@@ -91,4 +91,6 @@ supportTicketSchema.index({ user_id: 1, createdAt: -1 });
 // Admin assignment view
 supportTicketSchema.index({ assigned_to: 1, status: 1 });
 
+supportTicketSchema.plugin(require('./plugins/invalidateAdminCache'), { groups: ['support', 'dashboard'] });
+
 module.exports = mongoose.model("SupportTicket", supportTicketSchema);

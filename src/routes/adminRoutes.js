@@ -8,6 +8,7 @@
  */
 const express = require("express");
 const router  = express.Router();
+const adminCache = require('../middlewares/adminCache');
 
 const { protect, authorize } = require("../middlewares/authMiddleware");
 const { authIpLimiter, loginLimiter, staffLimiter, uploadLimiter, deviceRegisterLimiter } = require("../security/rateLimiter");
@@ -60,20 +61,20 @@ router.get("/dashboard/health", authorize("ADMIN"),           getSystemHealth);
 
 // Helper / Customer Care Staff Management (Admin only)
 router.post("/helpers",               authorize("ADMIN"), createHelperUser);
-router.get("/helpers",                authorize("ADMIN"), getHelperUsers);
+router.get("/helpers",                authorize("ADMIN"), adminCache('staff'), getHelperUsers);
 router.get("/helpers/:id",            authorize("ADMIN"), getHelperById);
 router.patch("/helpers/:id/status",   authorize("ADMIN"), updateHelperStatus);
 router.delete("/helpers/:id",         authorize("ADMIN"), deleteHelperUser);
 
 // User Management (Admin only)
-router.get("/users",              authorize("ADMIN"), getUsers);
+router.get("/users",              authorize("ADMIN"), adminCache('users'), getUsers);
 router.get("/users/:id",          authorize("ADMIN"), getUserById);
 router.patch("/users/:id/status", authorize("ADMIN"), updateUserStatus);
 router.delete("/users/:id",       authorize("ADMIN"), deleteUser);
 
 // Device Management & Control
 router.post("/devices",                   authorize("ADMIN"), deviceRegisterLimiter, registerDevice);
-router.get("/devices",                    authorize("ADMIN", "HELPER"), getDevices);
+router.get("/devices",                    authorize("ADMIN", "HELPER"), adminCache('devices'), getDevices);
 router.get("/devices/:id",                authorize("ADMIN", "HELPER"), getDeviceById);
 router.put("/devices/:id",                authorize("ADMIN"),           updateDevice);
 router.patch("/devices/:id/block",        authorize("ADMIN", "HELPER"), blockDevice);
@@ -82,7 +83,7 @@ router.patch("/devices/:id/force-unlink", authorize("ADMIN", "HELPER"), forceUnl
 router.patch("/devices/:id/retire",       authorize("ADMIN"),           retireDevice);
 
 // Pairing Logs & Remote Actions
-router.get("/pairing",                    authorize("ADMIN", "HELPER"), getPairingRequests);
+router.get("/pairing",                    authorize("ADMIN", "HELPER"), adminCache('pairing'), getPairingRequests);
 router.patch("/pairing/:id/force-unpair", authorize("ADMIN", "HELPER"), forceUnpairDevice);
 
 const firmwareUpload = require("../middlewares/firmwareUpload");
@@ -105,7 +106,7 @@ const {
 
 // Firmware Releases (Admin only - supports direct .bin upload)
 router.post("/firmware",              authorize("ADMIN"), uploadLimiter, firmwareUpload.single("firmware_file"), createFirmwareRelease);
-router.get("/firmware",               authorize("ADMIN", "HELPER"), getFirmwareReleases);
+router.get("/firmware",               authorize("ADMIN", "HELPER"), adminCache('firmware'), getFirmwareReleases);
 router.put("/firmware/:id",           authorize("ADMIN"), updateFirmwareRelease);
 router.patch("/firmware/:id/feature", authorize("ADMIN"), selectFeaturedFirmware);
 router.delete("/firmware/:id",        authorize("ADMIN"), deleteFirmwareRelease);
@@ -113,7 +114,7 @@ router.delete("/firmware/:id",        authorize("ADMIN"), deleteFirmwareRelease)
 // Mobile App APK Releases (Admin only - supports direct .apk upload to Cloudflare R2)
 router.post("/app-releases/upload-url",  authorize("ADMIN"), uploadLimiter, getUploadUrl);
 router.post("/app-releases",             authorize("ADMIN"), uploadLimiter, apkUpload.single("apk_file"), createAppRelease);
-router.get("/app-releases",              authorize("ADMIN", "HELPER"), getAppReleases);
+router.get("/app-releases",              authorize("ADMIN", "HELPER"), adminCache('releases'), getAppReleases);
 router.put("/app-releases/:id",          authorize("ADMIN"), updateAppRelease);
 router.patch("/app-releases/:id/feature",authorize("ADMIN"), selectFeaturedRelease);
 router.delete("/app-releases/:id",       authorize("ADMIN"), deleteAppRelease);
@@ -138,15 +139,15 @@ const {
 router.get("/users/:id/activity",                   authorize("ADMIN", "HELPER"), getUserActivityLogs);
 
 // Customer Support & Troubleshooting
-router.get("/support",                              authorize("ADMIN", "HELPER"), getSupportTickets);
+router.get("/support",                              authorize("ADMIN", "HELPER"), adminCache('support'), getSupportTickets);
 router.get("/support/:id",                          authorize("ADMIN", "HELPER"), getSupportTicket);
 router.patch("/support/:id",                        authorize("ADMIN", "HELPER"), updateSupportTicket);
 router.post("/support/:id/block-device",            authorize("ADMIN", "HELPER"), blockDeviceFromTicket);
 router.post("/support/:id/force-unlink-device",     authorize("ADMIN", "HELPER"), forceUnlinkDeviceFromTicket);
 
 // Staff Notification Inbox & Alerts (For ADMIN & HELPER)
-router.get("/notifications",                        authorize("ADMIN", "HELPER"), getStaffNotifications);
-router.get("/notifications/unread-count",           authorize("ADMIN", "HELPER"), getStaffUnreadCount);
+router.get("/notifications",                        authorize("ADMIN", "HELPER"), adminCache('notifications'), getStaffNotifications);
+router.get("/notifications/unread-count",           authorize("ADMIN", "HELPER"), adminCache('notifications'), getStaffUnreadCount);
 router.patch("/notifications/:id/read",             authorize("ADMIN", "HELPER"), markStaffNotificationRead);
 router.patch("/notifications/mark-all-read",        authorize("ADMIN", "HELPER"), markAllStaffNotificationsRead);
 

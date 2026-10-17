@@ -7,6 +7,7 @@ const { interestLimiter, adminReadLimiter } = require('../security/rateLimiter')
 const { scheduleInterestEmails } = require('../queues/interestEmail.queue');
 
 const router = express.Router();
+const adminCache = require('../middlewares/adminCache');
 const intents = ['Yes', 'Maybe', 'I want to know the price first'];
 const priceRanges = EarlyInterest.schema.path('priceRange').enumValues;
 const emailConsentText = 'I agree to receive JustRide emails, including my interest confirmation, product updates and availability announcements.';
@@ -44,7 +45,8 @@ router.post('/', interestLimiter, async (req, res, next) => {
   }
 });
 
-router.get('/', protect, authorize('ADMIN', 'HELPER'), adminReadLimiter, async (req, res, next) => {
+router.get('/', protect, authorize('ADMIN', 'HELPER'), adminReadLimiter,
+  (req, res, next) => { scheduleInterestEmails(res); next(); }, adminCache('interest'), async (req, res, next) => {
   try {
     const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
     const limit = 10;
@@ -52,7 +54,6 @@ router.get('/', protect, authorize('ADMIN', 'HELPER'), adminReadLimiter, async (
       EarlyInterest.find().sort({ createdAt: -1, _id: -1 }).skip((page - 1) * limit).limit(limit).lean(),
       EarlyInterest.countDocuments(),
     ]);
-    scheduleInterestEmails(res);
     return ApiResponse.success(res, { items, total, page, limit });
   } catch (error) { next(error); }
 });
