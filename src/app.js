@@ -119,6 +119,7 @@ app.use("/api/support", supportRoutes);
 app.use("/api/chat", chatRoutes);
 app.use("/api/upload", uploadRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/early-interest", require("./routes/websiteUpdateRoutes"));
 app.use("/api/early-interest", earlyInterestRoutes);
 
 // ─────────────────────────────────────────────────────────────

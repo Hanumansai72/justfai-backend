@@ -9,6 +9,7 @@ const earlyInterestSchema = new mongoose.Schema({
   notes: { type: String, trim: true },
   emailConsent: { type: Boolean, default: false },
   emailConsentAt: { type: Date },
+  emailUnsubscribedAt: { type: Date },
   emailConsentText: { type: String },
   confirmationEmailStatus: { type: String, enum: ['pending', 'queued', 'sending', 'sent', 'failed'], default: 'pending' },
   confirmationEmailCode: { type: String },

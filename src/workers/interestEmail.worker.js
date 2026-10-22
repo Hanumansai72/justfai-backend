@@ -1,4 +1,5 @@
 const { drainInterestEmails } = require('../queues/interestEmail.queue');
+const { drainWebsiteUpdates } = require('../services/websiteUpdateCampaign.service');
 let timer;
 let running = false;
 
@@ -8,7 +9,7 @@ function startInterestEmailWorker() {
   const tick = async () => {
     if (running) return;
     running = true;
-    try { await drainInterestEmails(); }
+    try { await drainInterestEmails(); await drainWebsiteUpdates(); }
     catch { console.error('[interest-email] QUEUE_PROCESSING_FAILED'); }
     finally { running = false; }
   };
