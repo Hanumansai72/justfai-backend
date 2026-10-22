@@ -12,7 +12,7 @@ async function drainInterestEmails(limit = 3) {
       confirmationEmailStatus: 'queued',
       $or: [{ confirmationEmailNextAttemptAt: null }, { confirmationEmailNextAttemptAt: { $lte: new Date() } }],
     }, { $set: { confirmationEmailStatus: 'sending', confirmationEmailCode: 'PROCESSING', confirmationEmailStartedAt: new Date() } },
-    { new: true, sort: { createdAt: 1 } }).lean();
+    { returnDocument: 'after', sort: { createdAt: 1 } }).lean();
     if (!interest) break;
     // Atomic queued -> sending means concurrent workers cannot send the same record.
     // Never reclaim 'sending': a crashed SMTP call may already have delivered the email.

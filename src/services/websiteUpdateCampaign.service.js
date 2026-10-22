@@ -43,7 +43,7 @@ async function status() {
 async function sendTest() {
   await ensureDraft();
   const claimed = await Campaign.findOneAndUpdate({ key: KEY, state: 'draft', testStatus: { $ne: 'sending' } },
-    { $set: { testStatus: 'sending', testCode: 'PROCESSING', testStartedAt: new Date(), testContentHash: contentHash() } }, { new: true });
+    { $set: { testStatus: 'sending', testCode: 'PROCESSING', testStartedAt: new Date(), testContentHash: contentHash() } }, { returnDocument: 'after' });
   if (!claimed) throw Object.assign(new Error('A test is already in progress or this campaign was already approved. Refresh its status before trying again.'), { statusCode: 409 });
   let result;
   try { result = await email.sendEmail({ to: TEST_RECIPIENT, ...websiteUpdate('Hanuman', '', true) }); }
@@ -68,7 +68,7 @@ async function approve({ confirmation, expectedRecipients, approvedBy, includeCo
   const campaign = await Campaign.findOneAndUpdate({ key: KEY, state: 'draft', testStatus: 'sent', testContentHash: contentHash() }, { $set: {
     state: 'queued', approvedAt: new Date(), approvedBy, includeContacted, permissionNote: permissionNote.trim(), approvalSource,
     recipients: recipients.map(person => ({ interestId: person._id, name: person.name, email: person.email, permissionBasis: person.emailConsent === true ? 'recorded_opt_in' : 'owner_confirmed_direct', status: 'queued', nextAttemptAt: new Date(0) })),
-  } }, { new: true });
+  } }, { returnDocument: 'after' });
   if (!campaign) throw Object.assign(new Error('Send a successful test of the current email first. An approved campaign cannot be queued twice.'), { statusCode: 409 });
   return { queued: recipients.length };
 }
@@ -80,7 +80,7 @@ async function drainWebsiteUpdates(limit = 1) {
     const claimId = randomUUID();
     const campaign = await Campaign.findOneAndUpdate({ key: KEY, state: 'queued', recipients: {
       $elemMatch: { status: 'queued', nextAttemptAt: { $lte: new Date() } },
-    } }, { $set: { 'recipients.$.status': 'sending', 'recipients.$.claimId': claimId, 'recipients.$.startedAt': new Date() } }, { new: true }).lean();
+    } }, { $set: { 'recipients.$.status': 'sending', 'recipients.$.claimId': claimId, 'recipients.$.startedAt': new Date() } }, { returnDocument: 'after' }).lean();
     if (!campaign) break;
     const recipient = campaign.recipients.find(person => person.claimId === claimId);
     let delivery;
