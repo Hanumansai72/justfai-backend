@@ -1,9 +1,6 @@
 const express = require('express');
-const { timingSafeEqual } = require('node:crypto');
-const { protect, authorize } = require('../middlewares/authMiddleware');
-const { adminReadLimiter, adminWriteLimiter, publicReadLimiter } = require('../security/rateLimiter');
+const { publicReadLimiter } = require('../security/rateLimiter');
 const EarlyInterest = require('../models/EarlyInterest.model');
-const service = require('../services/websiteUpdateCampaign.service');
 const { verifyUnsubscribe } = require('../services/interestUnsubscribe.service');
 const router = express.Router();
 const route = handler => (req, res, next) => Promise.resolve(handler(req, res)).catch(next);
@@ -24,35 +21,6 @@ router.post('/unsubscribe', publicReadLimiter, route(async (req, res) => {
   if (!id) return res.status(400).type('html').send(unsubscribePage('This email preference link is invalid. Contact info@justride.cc for help.'));
   await EarlyInterest.updateOne({ _id: id }, { $set: { emailConsent: false, emailUnsubscribedAt: new Date() } });
   return res.type('html').send(unsubscribePage('You are unsubscribed from JustRide product updates.'));
-}));
-
-router.get('/website-update/process', route(async (req, res) => {
-  const secret = process.env.CRON_SECRET;
-  const supplied = req.headers.authorization || '';
-  const expected = secret ? `Bearer ${secret}` : '';
-  if (!expected || Buffer.byteLength(supplied) !== Buffer.byteLength(expected) || !timingSafeEqual(Buffer.from(supplied), Buffer.from(expected))) return res.status(401).json({ success: false, message: 'Scheduler authorization required.' });
-  res.set('Cache-Control', 'no-store');
-  const processed = await service.drainWebsiteUpdates();
-  return res.json({ success: true, data: { processed } });
-}));
-
-router.use('/website-update', protect, authorize('ADMIN'));
-router.get('/website-update', adminReadLimiter, route(async (req, res) => {
-  res.set('Cache-Control', 'no-store');
-  const data = await service.status();
-  // Polling assists serverless deployments; a persistent worker or scheduler continues after the browser closes.
-  if (data.state === 'queued') service.scheduleWebsiteUpdates(res);
-  return res.json({ success: true, data });
-}));
-router.post('/website-update/test', adminWriteLimiter, route(async (req, res) => {
-  const delivery = await service.sendTest();
-  return res.status(delivery.sent ? 200 : 502).json({ success: delivery.sent, data: delivery,
-    message: delivery.sent ? 'The test was accepted by the mail server. Check the preview inbox before approving the campaign.' : `Test email was not confirmed: ${delivery.code}. Check campaign status before retrying.` });
-}));
-router.post('/website-update/approve', adminWriteLimiter, route(async (req, res) => {
-  const data = await service.approve({ ...req.body, approvedBy: req.user._id, approvalSource: 'admin' });
-  service.scheduleWebsiteUpdates(res);
-  return res.status(202).json({ success: true, data, message: 'Campaign approved and queued. Each message is sent individually within the shared mail limits.' });
 }));
 
 module.exports = router;
