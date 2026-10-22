@@ -1,6 +1,7 @@
 const { randomUUID } = require('node:crypto');
 const Campaign = require('../models/WebsiteUpdateCampaign.model');
 const EarlyInterest = require('../models/EarlyInterest.model');
+const { getOutgoingQuota } = require('./mailQuota.service');
 const email = require('./email.service');
 const { websiteUpdate, contentHash, SUBJECT, TEST_RECIPIENT } = require('./websiteUpdate.template');
 const { unsubscribeUrl } = require('./interestUnsubscribe.service');
@@ -17,16 +18,18 @@ async function ensureDraft() {
 }
 
 async function status() {
-  const [campaign, eligibleCount, contactedCount] = await Promise.all([
+  const [campaign, eligibleCount, contactedCount, quota] = await Promise.all([
     Campaign.findOne({ key: KEY }).lean(), EarlyInterest.countDocuments(audienceQuery(false)),
-    EarlyInterest.countDocuments(audienceQuery(true)),
+    EarlyInterest.countDocuments(audienceQuery(true)), getOutgoingQuota(),
   ]);
   const counts = { queued: 0, sending: 0, sent: 0, failed: 0, skipped: 0 };
   for (const recipient of campaign?.recipients || []) counts[recipient.status]++;
+  const queuedTimes = campaign?.recipients?.filter(p => p.status === 'queued').map(p => new Date(p.nextAttemptAt || 0).getTime()) || [];
+  const nextAttemptAt = queuedTimes.length ? new Date(Math.max(Date.now(), Math.min(...queuedTimes), quota.pausedUntil ? new Date(quota.pausedUntil).getTime() : 0)) : null;
   return {
     key: KEY, subject: SUBJECT, state: campaign?.state || 'draft', eligibleCount, contactedCount,
     includeContacted: campaign?.includeContacted || false, permissionNote: campaign?.permissionNote,
-    nextAttemptAt: campaign?.recipients?.filter(p => p.status === 'queued').reduce((next, p) => !next || p.nextAttemptAt < next ? p.nextAttemptAt : next, null),
+    nextAttemptAt, quota,
     total: campaign?.recipients?.length || 0, counts,
     testRecipient: TEST_RECIPIENT,
     testStatus: campaign?.testStatus || 'not_sent', testCode: campaign?.testCode,
@@ -73,6 +76,7 @@ async function approve({ confirmation, expectedRecipients, approvedBy, includeCo
 async function drainWebsiteUpdates(limit = 1) {
   let processed = 0;
   while (processed < limit) {
+    if ((await getOutgoingQuota()).pausedUntil) break;
     const claimId = randomUUID();
     const campaign = await Campaign.findOneAndUpdate({ key: KEY, state: 'queued', recipients: {
       $elemMatch: { status: 'queued', nextAttemptAt: { $lte: new Date() } },
@@ -88,8 +92,12 @@ async function drainWebsiteUpdates(limit = 1) {
         ? await (directPermission ? email.sendEmail : email.sendInterestUpdate)({ to: recipient.email, ...websiteUpdate(recipient.name, unsubscribeUrl(recipient.interestId), false, directPermission) })
         : { sent: false, code: 'CONSENT_REQUIRED' };
     } catch { delivery = { sent: false, code: 'DELIVERY_FAILED' }; }
-    const delays = { HOURLY_LIMIT: 60 * 60 * 1000, RECIPIENT_LIMIT: 15 * 60 * 1000, NOT_CONFIGURED: 5 * 60 * 1000 };
-    const delay = delays[delivery.code];
+    const delays = { DAILY_LIMIT: 24 * 60 * 60 * 1000, HOURLY_LIMIT: 60 * 60 * 1000, RECIPIENT_LIMIT: 15 * 60 * 1000, NOT_CONFIGURED: 5 * 60 * 1000 };
+    let delay = delays[delivery.code];
+    if (delivery.code === 'DAILY_LIMIT' || delivery.code === 'HOURLY_LIMIT') {
+      const quota = await getOutgoingQuota();
+      if (quota.pausedUntil) delay = Math.max(1000, new Date(quota.pausedUntil).getTime() - Date.now() + 1000);
+    }
     const nextStatus = delivery.sent ? 'sent' : delay ? 'queued' : delivery.code === 'CONSENT_REQUIRED' ? 'skipped' : 'failed';
     await Campaign.updateOne({ key: KEY }, { $set: {
       'recipients.$[person].status': nextStatus,

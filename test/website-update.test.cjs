@@ -4,6 +4,7 @@ process.env.JWT_SECRET = 'isolated-test-signing-secret';
 process.env.PUBLIC_API_URL = 'https://backend.justride.cc';
 const Campaign = require('../src/models/WebsiteUpdateCampaign.model');
 const Interest = require('../src/models/EarlyInterest.model');
+const EmailLimit = require('../src/models/EmailLimit.model');
 const email = require('../src/services/email.service');
 const service = require('../src/services/websiteUpdateCampaign.service');
 const { websiteUpdate, contentHash, TEST_RECIPIENT } = require('../src/services/websiteUpdate.template');
@@ -17,6 +18,7 @@ beforeEach(() => {
   audience = [{ _id: id, name: 'Preview Rider', email: 'preview@example.com' }];
   sent = []; optedIn = true; outcome = { sent: true, code: 'SENT' };
   Campaign.init = async () => {};
+  EmailLimit.findById = () => queryValue(null);
   Campaign.findOne = () => queryValue(document);
   Interest.countDocuments = async () => audience.length;
   Interest.find = () => ({ select: () => queryValue(audience) });
@@ -175,4 +177,26 @@ test('direct permission never overrides a recorded unsubscribe', async () => {
   assert.equal(checked.emailUnsubscribedAt, null);
   assert.equal(sent.length, 0);
   assert.equal(document.recipients[0].status, 'skipped');
+});
+
+
+test('an exhausted shared quota pauses work before claiming another recipient', async () => {
+  queue();
+  const resetAt = new Date(Date.now() + 1800000);
+  EmailLimit.findById = () => queryValue({ reservations: Array(900).fill(new Date(resetAt.getTime() - 86400000)) });
+  await service.drainWebsiteUpdates();
+  assert.equal(sent.length, 0);
+  assert.equal(document.recipients[0].status, 'queued');
+  const summary = await service.status();
+  assert.deepEqual(summary.quota.pausedUntil, resetAt);
+  assert.equal(summary.nextAttemptAt.getTime(), resetAt.getTime());
+});
+
+test('a daily-limit retry uses the actual rolling quota reset', async () => {
+  queue(); let reads = 0;
+  const resetAt = new Date(Date.now() + 300000);
+  EmailLimit.findById = () => queryValue(++reads === 1 ? null : { reservations: Array(900).fill(new Date(resetAt.getTime() - 86400000)) });
+  outcome = { sent: false, code: 'DAILY_LIMIT' };
+  await service.drainWebsiteUpdates();
+  assert.equal(document.recipients[0].nextAttemptAt.getTime(), resetAt.getTime() + 1000);
 });

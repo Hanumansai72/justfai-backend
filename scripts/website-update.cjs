@@ -48,13 +48,13 @@ async function main() {
       if (current.state !== 'queued') { console.log(`Campaign state: ${current.state}. No further messages processed.`); break; }
       await service.drainWebsiteUpdates();
       const updated = await service.status();
-      console.log(JSON.stringify({ time: new Date().toISOString(), state: updated.state, counts: updated.counts }));
+      console.log(JSON.stringify({ time: new Date().toISOString(), state: updated.state, counts: updated.counts, pausedUntil: updated.quota?.pausedUntil, nextAttemptAt: updated.nextAttemptAt }));
       const delay = updated.nextAttemptAt ? Math.min(60000, Math.max(10000, new Date(updated.nextAttemptAt).getTime() - Date.now())) : 10000;
       await new Promise(resolve => setTimeout(resolve, delay));
     } while (true);
   }
-  const { key, state, eligibleCount, contactedCount, testStatus, testCode, testSentAt, testedCurrentContent, total, counts } = await service.status();
-  console.log(JSON.stringify({ key, state, eligibleCount, contactedCount, testStatus, testCode, testSentAt, testedCurrentContent, total, counts }));
+  const { key, state, eligibleCount, contactedCount, testStatus, testCode, testSentAt, testedCurrentContent, total, counts, quota, nextAttemptAt } = await service.status();
+  console.log(JSON.stringify({ key, state, eligibleCount, contactedCount, testStatus, testCode, testSentAt, testedCurrentContent, total, counts, quota, nextAttemptAt }));
 }
 
 main().catch(error => {

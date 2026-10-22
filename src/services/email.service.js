@@ -3,6 +3,7 @@ const validator = require('validator');
 const nodemailer = require('nodemailer');
 const EmailLimit = require('../models/EmailLimit.model');
 const EarlyInterest = require('../models/EarlyInterest.model');
+const { claimOutgoing } = require('./mailQuota.service');
 
 // Database counters survive restarts and are shared by Vercel instances.
 async function claim(key, windowMs, max) {
@@ -38,9 +39,7 @@ async function sendEmail({ to, subject, html, text }) {
   try {
     const recipientKey = createHash('sha256').update(to.toLowerCase()).digest('hex');
     if (!await claim(`recipient:${recipientKey}`, 15 * 60 * 1000, 3)) return failure('RECIPIENT_LIMIT');
-    // Any rolling 24 hours intersects at most 25 hourly windows: 25 * 36 = 900.
-    // Leave at least 100 of the observed 1,000 messages for normal mailbox use.
-    if (!await claim('hostinger-outgoing', 60 * 60 * 1000, 36)) return failure('HOURLY_LIMIT');
+    if (!await claimOutgoing()) return failure('DAILY_LIMIT');
     transport = nodemailer.createTransport({
       host: process.env.MAIL_HOST, port: Number(process.env.MAIL_PORT), secure: true,
       auth: { user: process.env.MAIL_USER, pass: process.env.MAIL_PASSWORD },

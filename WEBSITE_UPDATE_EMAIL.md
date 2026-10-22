@@ -17,7 +17,7 @@ invalidates old preference links. Never log these secrets or token URLs.
 ## Sending and scheduling
 
 One approval queues the full selected audience. Website opt-in is the default. An admin can additionally include registered contacts only after explicitly recording directly confirmed permission for this mailing. This does not rewrite website consent, and recorded unsubscribes are always excluded. Messages are individual emails
-through the existing shared 36/hour allowance; account/security emails share it.
+through a shared rolling 900-messages/24-hours application budget against the owner-confirmed 1,000/day paid mailbox limit, leaving 100 for other mailbox use. Account/security emails share this budget. The campaign remains paced at one email roughly every ten seconds.
 Consent is checked again just before sending. Unsubscribe links open a confirmation
 form; GET does not change preferences, so link scanners cannot unsubscribe people.
 

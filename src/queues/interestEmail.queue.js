@@ -1,6 +1,7 @@
 const { waitUntil } = require('@vercel/functions');
 const EarlyInterest = require('../models/EarlyInterest.model');
 const emailService = require('../services/email.service');
+const { getOutgoingQuota } = require('../services/mailQuota.service');
 const { interestConfirmation } = require('../services/email.templates');
 
 // The interest record is the durable queue entry: save and enqueue are one Mongo write.
@@ -18,7 +19,11 @@ async function drainInterestEmails(limit = 3) {
     const delivery = interest.emailConsent === true
       ? await emailService.sendEmail({ to: interest.email, ...interestConfirmation(interest.name, true) })
       : { sent: false, code: 'CONSENT_REQUIRED' };
-    const delay = { RECIPIENT_LIMIT: 15 * 60 * 1000, HOURLY_LIMIT: 60 * 60 * 1000, NOT_CONFIGURED: 5 * 60 * 1000 }[delivery.code];
+    let delay = { DAILY_LIMIT: 24 * 60 * 60 * 1000, RECIPIENT_LIMIT: 15 * 60 * 1000, HOURLY_LIMIT: 60 * 60 * 1000, NOT_CONFIGURED: 5 * 60 * 1000 }[delivery.code];
+    if (delivery.code === 'DAILY_LIMIT') {
+      const quota = await getOutgoingQuota();
+      if (quota.pausedUntil) delay = Math.max(1000, new Date(quota.pausedUntil).getTime() - Date.now() + 1000);
+    }
     await EarlyInterest.updateOne({ _id: interest._id, confirmationEmailStatus: 'sending' }, { $set: {
       confirmationEmailStatus: delivery.sent ? 'sent' : delay ? 'queued' : 'failed',
       confirmationEmailCode: delivery.code,
