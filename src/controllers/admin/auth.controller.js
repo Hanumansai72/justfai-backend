@@ -12,6 +12,7 @@
 const Admin  = require("../../models/Admin.model");
 const Helper = require("../../models/Helper.model");
 const audit  = require("../../security/auditLogger");
+const { notifyAdminSignIn } = require("../../queues/notification.queue");
 const {
   generateAccessToken,
   generateRefreshToken,
@@ -145,6 +146,9 @@ exports.adminLogin = async (req, res, next) => {
 
     setTokenCookies(res, accessToken, refreshToken);
     req.auditSessionId = hashToken(accessToken);
+    if (!isHelper) {
+      await notifyAdminSignIn({ account, ip: audit.getClientIp(req), userAgent: req.get("user-agent") });
+    }
 
     audit.log({
       req,

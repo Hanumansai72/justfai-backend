@@ -84,6 +84,7 @@ exports.getStaffNotifications = async (req, res, next) => {
         (n.read_by && n.read_by.some((r) => r.staff_id?.toString() === req.user._id.toString()));
 
       return {
+        _id:             n._id,
         id:              n._id,
         type:            n.type,
         priority:        n.priority || "medium",
@@ -152,6 +153,12 @@ exports.markStaffNotificationRead = async (req, res, next) => {
   try {
     const notification = await Notification.findById(req.params.id);
     if (!notification) {
+      return res.status(404).json({ success: false, message: "Notification not found" });
+    }
+
+    const own = notification.recipient_id?.toString() === req.user._id.toString();
+    const audience = req.user.role === "ADMIN" ? "ADMIN_ONLY" : "HELPER_ONLY";
+    if (!own && !["ALL_STAFF", audience].includes(notification.target_audience)) {
       return res.status(404).json({ success: false, message: "Notification not found" });
     }
 

@@ -1,6 +1,7 @@
 const User = require("../models/User");
 const { OAuth2Client } = require("google-auth-library");
 const audit = require("../security/auditLogger");
+const { notifyNewUser } = require("../queues/notification.queue");
 const { sendEmail } = require('../services/email.service');
 const { passwordReset, accountConfirmation, passwordChanged } = require('../services/email.templates');
 const {
@@ -179,6 +180,7 @@ exports.googleAuth = async (req, res, next) => {
         auth_provider: "google",
         role: "USER",
       });
+      await notifyNewUser(user);
     } else if (!user.google_id) {
       await User.updateOne(
         { _id: user._id },
@@ -231,6 +233,7 @@ exports.register = async (req, res, next) => {
     }
 
     const user = await User.create({ name, phonenumber, email, password, role: "USER" });
+    await notifyNewUser(user);
     await sendEmail({ to: user.email, ...accountConfirmation(user.name) });
 
     audit.log({

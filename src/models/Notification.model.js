@@ -53,6 +53,8 @@ const notificationSchema = new mongoose.Schema(
         "TICKET_CUSTOMER_REPLY",
         "DEVICE_CRITICAL_ALERT",
         "SYSTEM_ALERT",
+        "NEW_USER_REGISTERED",
+        "ADMIN_SIGN_IN",
       ],
       index: true,
     },
@@ -100,14 +102,13 @@ const notificationSchema = new mongoose.Schema(
 );
 
 // Pre-save hook to keep user_id and recipient_id synced for backwards compatibility
-notificationSchema.pre("save", function (next) {
+notificationSchema.pre("save", function () {
   if (this.recipient_id && !this.user_id && this.recipient_model === "User") {
     this.user_id = this.recipient_id;
   } else if (this.user_id && !this.recipient_id) {
     this.recipient_id = this.user_id;
     this.recipient_model = "User";
   }
-  next();
 });
 
 // High-speed compound indexes for queries

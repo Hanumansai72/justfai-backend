@@ -3,9 +3,9 @@
  * BullMQ Producer for Real-Time & Background User & Staff Notification Jobs.
  *
  * Implements:
- *   - Priority Queuing (Urgent tickets and security alerts get Priority 1)
+ *   - Background queue for customer notification jobs
  *   - Exponential Backoff Retries (3 attempts: 2s, 4s, 8s)
- *   - Staff & Admin Notifications for new support tickets and critical events
+ *   - Direct persistence for staff inbox events (also works on serverless)
  *   - Zero-Downtime Direct Database Fallback if Redis is Offline
  */
 const { Queue } = require("bullmq");
@@ -87,7 +87,7 @@ const enqueueNotification = async ({ user_id, type, title, message, data = {} })
 };
 
 /**
- * Dispatch Staff / Admin notification job (for new tickets, replies, and system alerts).
+ * Persist a staff/admin inbox event before returning, without requiring a worker.
  *
  * @param {Object} options
  * @param {string} options.type - "NEW_SUPPORT_TICKET" | "TICKET_ASSIGNED" | "TICKET_CUSTOMER_REPLY" | "DEVICE_CRITICAL_ALERT" | "SYSTEM_ALERT"
@@ -109,33 +109,7 @@ const enqueueStaffNotification = async ({
   recipient_id = null,
   recipient_model = "Helper",
 }) => {
-  const priorityMap = { urgent: 1, high: 2, medium: 3, low: 4 };
-  const queuePriority = priorityMap[priority] || 3;
-
-  if (notificationQueue && isRedisConnected()) {
-    try {
-      const job = await notificationQueue.add(
-        type,
-        {
-          recipient_id,
-          recipient_model,
-          target_audience,
-          type,
-          title,
-          message,
-          data,
-          priority,
-          timestamp: new Date(),
-        },
-        { priority: queuePriority }
-      );
-      return { queued: true, jobId: job.id };
-    } catch (err) {
-      console.warn(`[Queue:StaffNotification] Enqueue failed: ${err.message}. Falling back.`);
-    }
-  }
-
-  // Graceful direct write fallback
+  // The serverless app has no resident BullMQ worker. Persist inbox events now.
   try {
     const doc = await Notification.create({
       recipient_id,
@@ -149,7 +123,7 @@ const enqueueStaffNotification = async ({
     });
     return { queued: false, direct: true, id: doc._id };
   } catch (err) {
-    console.error("[Queue:StaffNotification] Direct write fallback error:", err.message);
+    console.error("[StaffNotification] Could not persist inbox event:", err.message);
     return null;
   }
 };
@@ -163,7 +137,7 @@ const notifyNewTicket = async ({ ticket, customer, device = null }) => {
   return await enqueueStaffNotification({
     type: "NEW_SUPPORT_TICKET",
     title: `New Ticket [${ticket.ticket_number}]: ${ticket.subject}`,
-    message: `Customer ${customer.name || customer.email} submitted a ${ticket.category} ticket: "${ticket.description.slice(0, 100)}..."`,
+    message: `Customer ${customer.name || customer.email} submitted a ${ticket.category} ticket: "${(ticket.description || ticket.subject).slice(0, 100)}"`,
     data: {
       ticket_id:      ticket._id,
       ticket_number:  ticket.ticket_number,
@@ -219,6 +193,23 @@ const notifyDeviceCriticalAlert = async ({ device, reason, alertType = "DEVICE_C
   });
 };
 
+const notifyNewUser = (user) => enqueueStaffNotification({
+  type: "NEW_USER_REGISTERED",
+  title: "New user registered",
+  message: `${user.name || user.email} created a JustRide account.`,
+  data: { user_id: user._id, user_name: user.name },
+  target_audience: "ADMIN_ONLY",
+});
+
+const notifyAdminSignIn = ({ account, ip, userAgent }) => enqueueStaffNotification({
+  type: "ADMIN_SIGN_IN",
+  title: "Admin sign-in",
+  message: `${account.name || account.email} signed in to the admin portal from ${ip || "an unknown IP address"}.`,
+  data: { admin_id: account._id, ip, user_agent: String(userAgent || "").slice(0, 500) },
+  priority: "high",
+  target_audience: "ADMIN_ONLY",
+});
+
 module.exports = {
   notificationQueue,
   enqueueNotification,
@@ -226,4 +217,6 @@ module.exports = {
   notifyNewTicket,
   notifyTicketReply,
   notifyDeviceCriticalAlert,
+  notifyNewUser,
+  notifyAdminSignIn,
 };
