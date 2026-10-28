@@ -43,4 +43,15 @@ const accountDeletionOtp = (name, otp) => message('Confirm deletion of your Just
   'Never share this code. If you did not request account deletion, ignore this email and secure your account.',
 ]);
 
-module.exports = { interestConfirmation, unlinkOtp, passwordReset, accountConfirmation, passwordChanged, accountDeletionOtp };
+const adminSignIn = ({ email, ip, location, at }) => message('New JustRide admin login', [
+  'A successful administrator login was detected in the JustRide admin portal.',
+  `Admin account: ${email}`,
+  `IP address: ${ip}`,
+  `Approximate location: ${location}`,
+  `Login time (India): ${new Intl.DateTimeFormat('en-IN', { dateStyle: 'full', timeStyle: 'long', timeZone: 'Asia/Kolkata' }).format(at)}`,
+  `Login time (UTC): ${at.toISOString()}`,
+  'IP-based location is approximate and may reflect a VPN or mobile network.',
+  'If this was not you, change your admin password immediately.',
+]);
+
+module.exports = { interestConfirmation, unlinkOtp, passwordReset, accountConfirmation, passwordChanged, accountDeletionOtp, adminSignIn };

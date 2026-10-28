@@ -9,6 +9,8 @@
  *   - Complete Audit Logging for Employee Logins & Lifecycle Operations
  *   - Admin Self-Credential Management
  */
+const { waitUntil } = require('@vercel/functions');
+const { sendAdminLoginAlert } = require('../../services/adminLoginAlert.service');
 const Admin  = require("../../models/Admin.model");
 const Helper = require("../../models/Helper.model");
 const audit  = require("../../security/auditLogger");
@@ -148,6 +150,9 @@ exports.adminLogin = async (req, res, next) => {
     req.auditSessionId = hashToken(accessToken);
     if (!isHelper) {
       await notifyAdminSignIn({ account, ip: audit.getClientIp(req), userAgent: req.get("user-agent") });
+      // Keep SMTP off the login response path and alive on serverless deployments.
+      waitUntil(sendAdminLoginAlert({ account, req, ip: audit.getClientIp(req) })
+        .catch(() => console.warn('[AdminLoginEmail] DELIVERY_FAILED')));
     }
 
     audit.log({

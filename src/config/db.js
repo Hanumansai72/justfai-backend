@@ -31,6 +31,7 @@ const connectDB = async () => {
   })
     .then(async (conn) => {
       await require('./verifyAdmin')();
+      await require('./auditRetention')();
       cachedConnection = conn;
       console.log("MongoDB Connected Successfully");
       console.log(`Host: ${conn.connection.host}`);

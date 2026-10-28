@@ -49,7 +49,7 @@ auditLogSchema.index({ resource_type: 1, resource_id: 1, createdAt: -1, _id: -1 
 auditLogSchema.index({ ip_address: 1, createdAt: -1 });
 auditLogSchema.index({ 'metadata.source': 1, createdAt: -1 });
 
-// Optional: auto-expire after 90 days (uncomment for compliance-free deployments)
-// auditLogSchema.index({ createdAt: 1 }, { expireAfterSeconds: 7_776_000 });
+// MongoDB expires each record seven days after it was created.
+auditLogSchema.index({ createdAt: 1 }, { expireAfterSeconds: 604800 });
 
 module.exports = mongoose.model("AuditLog", auditLogSchema);
