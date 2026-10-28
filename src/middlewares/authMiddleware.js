@@ -35,14 +35,14 @@ exports.protect = async (req, res, next) => {
     }
     if (!decoded?.id) return res.status(401).json({ success: false, message: 'Not authorized, token failed' });
     req.user = await User.findById(decoded.id)
-      .select("role status status_reason name email employee_id +credential_version")
+      .select("role status status_reason name email username employee_id +credential_version")
       .lean();
 
     // If not found in Users, check Helper (Customer Care Staff) collection
     if (!req.user) {
       const Helper = require("../models/Helper.model");
       req.user = await Helper.findById(decoded.id)
-        .select("role status status_reason name email employee_id")
+        .select("role status status_reason name email username employee_id")
         .lean();
     }
 
