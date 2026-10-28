@@ -39,6 +39,13 @@ const userSchema = new mongoose.Schema(
       unique: true,
       sparse: true,
     },
+    password_change_hash: { type: String, select: false },
+    password_change_nonce: { type: String, select: false },
+    password_change_expires: { type: Date, select: false },
+    password_change_sent_at: { type: Date, select: false },
+    password_change_attempts: { type: Number, default: 0, select: false },
+    password_change_ready: { type: Boolean, default: false, select: false },
+    credential_version: { type: Number, default: 0, select: false },
     avatar: {
       type: String,
     },

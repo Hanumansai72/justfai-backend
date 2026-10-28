@@ -75,7 +75,7 @@ exports.adminLogin = async (req, res, next) => {
         { email: lowerIdentifier },
       ],
       role: "ADMIN",
-    }).select("+password +refresh_tokens");
+    }).select("+password +refresh_tokens +credential_version");
 
     let isHelper = false;
 
@@ -203,7 +203,7 @@ exports.adminLogout = async (req, res, next) => {
 // Client-only actions (navigation and CSV export); the actor always comes from auth.
 exports.recordAdminActivity = (req, res) => {
   const { event, path } = req.body || {};
-  const allowedPages = /^\/(dashboard|users|interested-users|helpers|devices|firmware|app-releases|audit-logs|support|tickets|notifications)(\/[a-zA-Z0-9_-]+)*$/;
+  const allowedPages = /^\/(dashboard|users|interested-users|helpers|devices|firmware|app-releases|audit-logs|support|tickets|notifications|profile)(\/[a-zA-Z0-9_-]+)*$/;
   if (!['PAGE_VIEW', 'AUDIT_EXPORT', 'AUDIT_DETAIL_EXPORT'].includes(event) || typeof path !== 'string' ||
       path.length > 200 || !allowedPages.test(path) || (event === 'AUDIT_EXPORT' && path !== '/audit-logs') ||
       (event === 'AUDIT_DETAIL_EXPORT' && !/^\/audit-logs\/[a-f\d]{24}$/i.test(path))) {
@@ -243,6 +243,8 @@ exports.updateAdminCredentials = async (req, res, next) => {
   try {
     const { name, username, email, currentPassword, newPassword } = req.body;
     const isHelper = req.user.role !== "ADMIN" && !!req.user.employee_id;
+    if (!isHelper && newPassword !== undefined) return res.status(400).json({
+      success: false, message: 'Use the email OTP password-change flow in Admin Profile.' });
     const Model = isHelper ? Helper : Admin;
 
     const account = await Model.findById(req.user._id).select("+password");

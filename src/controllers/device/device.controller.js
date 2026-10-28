@@ -224,3 +224,25 @@ exports.deleteDevice = async (req, res, next) => {
     next(error);
   }
 };
+
+// Reports actual BLE contact through the authenticated owner app. Server time only.
+exports.heartbeat = async (req, res, next) => {
+  try {
+    const address = req.body?.BLE_ADDRESS;
+    if (typeof address !== 'string' || !/^[0-9a-f]{2}(:[0-9a-f]{2}){5}$/i.test(address)) {
+      return res.status(400).json({ success: false, message: 'A valid BLE address is required.' });
+    }
+    const now = new Date();
+    const filter = { BLE_ADDRESS: address.toUpperCase(), linked_to: req.user._id,
+      is_paired: true, is_active: true, is_blocked: false, is_retired: false };
+    const device = await Device.findOne(filter).select('_id last_seen_at').lean();
+    if (!device) return res.status(404).json({ success: false, message: 'Active paired device not found.' });
+    // Bound writes/cache invalidations, including old or modified clients.
+    if (!device.last_seen_at || now - device.last_seen_at >= 60000) {
+      await Device.updateOne({ ...filter, _id: device._id,
+        $or: [{ last_seen_at: null }, { last_seen_at: { $lte: new Date(now - 60000) } }] },
+        { $max: { last_seen_at: now } });
+    }
+    return res.json({ success: true });
+  } catch (error) { next(error); }
+};

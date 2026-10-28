@@ -11,7 +11,7 @@ const router  = express.Router();
 const adminCache = require('../middlewares/adminCache');
 
 const { protect, authorize } = require("../middlewares/authMiddleware");
-const { authIpLimiter, loginLimiter, staffLimiter, uploadLimiter, deviceRegisterLimiter } = require("../security/rateLimiter");
+const { authIpLimiter, loginLimiter, staffLimiter, uploadLimiter, deviceRegisterLimiter, otpSendLimiter, otpVerifyLimiter } = require("../security/rateLimiter");
 
 // Auth & Staff Controllers
 const {
@@ -54,6 +54,10 @@ router.post('/activity', authorize('ADMIN', 'HELPER'), recordAdminActivity);
 // Profile & Self Credential Updates
 router.get("/me",              authorize("ADMIN", "HELPER"), getAdminProfile);
 router.put("/credentials",     authorize("ADMIN", "HELPER"), updateAdminCredentials);
+
+const adminPassword = require('../controllers/admin/password.controller');
+router.post('/profile/password/otp', authorize('ADMIN'), otpSendLimiter, adminPassword.requestOtp);
+router.post('/profile/password', authorize('ADMIN'), otpVerifyLimiter, adminPassword.changePassword);
 
 // Dashboard (Admins & Helpers can view stats)
 router.get("/dashboard/stats",  authorize("ADMIN", "HELPER"), getDashboardStats);

@@ -54,4 +54,9 @@ const adminSignIn = ({ email, ip, location, at }) => message('New JustRide admin
   'If this was not you, change your admin password immediately.',
 ]);
 
-module.exports = { interestConfirmation, unlinkOtp, passwordReset, accountConfirmation, passwordChanged, accountDeletionOtp, adminSignIn };
+const adminPasswordOtp = (otp) => message('Confirm your JustRide admin password change', [
+  `Your admin password-change code is ${otp}. It expires in 10 minutes.`,
+  'Never share this code. If you did not request this change, secure your admin account.',
+]);
+
+module.exports = { interestConfirmation, unlinkOtp, passwordReset, accountConfirmation, passwordChanged, accountDeletionOtp, adminSignIn, adminPasswordOtp };

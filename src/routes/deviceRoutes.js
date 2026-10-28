@@ -10,6 +10,7 @@ const {
   registerDevice,
   getDevice,
   getMyDevice,
+  heartbeat,
   updateDevice,
   deleteDevice,
 } = require("../controllers/device/device.controller");
@@ -50,6 +51,8 @@ router.post("/unlink",                 unlinkLimiter,  validate.unlinkDevice, un
 router.post("/:id/unlink",             unlinkLimiter,  validate.unlinkDevice, unlinkDevice);
 
 // ── My Device ──────────────────────────────────────────────────
+router.post("/heartbeat", authorize("USER"), heartbeat);
+
 router.get("/my-device",  getMyDevice);
 router.get("/my-devices", getMyDevice); // alias
 

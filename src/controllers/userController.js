@@ -316,7 +316,7 @@ exports.refreshToken = async (req, res, next) => {
     const hashedIncomingToken = hashToken(rawRefreshToken);
 
     // Fetch user including hidden refresh_tokens array
-    const user = await User.findById(decoded.id).select("+refresh_tokens");
+    const user = await User.findById(decoded.id).select("+refresh_tokens +credential_version");
 
     if (!user) {
       clearTokenCookies(res);
@@ -550,7 +550,7 @@ exports.getAllUsers = async (req, res, next) => {
 exports.forgotPassword = async (req, res, next) => {
   try {
     const { email } = req.body;
-    const user = await User.findOne({ email: String(email).trim().toLowerCase() });
+    const user = await User.findOne({ email: String(email).trim().toLowerCase(), role: { $ne: "ADMIN" } });
 
     // Anti-enumeration defense
     if (!user) {
@@ -615,6 +615,7 @@ exports.resetPassword = async (req, res, next) => {
     const hashedToken = crypto.createHash("sha256").update(rawToken).digest("hex");
 
     const user = await User.findOne({
+      role: { $ne: "ADMIN" },
       password_reset_token: hashedToken,
       password_reset_expires: { $gt: new Date() },
     });
@@ -658,6 +659,8 @@ exports.resetPassword = async (req, res, next) => {
 // ─────────────────────────────────────────────
 exports.changePassword = async (req, res, next) => {
   try {
+    if (req.user.role === 'ADMIN') return res.status(403).json({ success: false,
+      message: 'Use Admin Profile and email OTP to change the admin password.' });
     const { currentPassword, newPassword } = req.body;
 
     const user = await User.findById(req.user._id).select("+password");

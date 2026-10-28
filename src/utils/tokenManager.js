@@ -34,6 +34,7 @@ const generateAccessToken = (user) => {
     {
       id: user._id || user.id,
       role: user.role || "USER",
+      ...(user.role === "ADMIN" && { credential_version: user.credential_version || 0 }),
     },
     ACCESS_SECRET,
     { expiresIn: ACCESS_EXPIRE }

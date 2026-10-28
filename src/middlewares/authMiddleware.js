@@ -35,7 +35,7 @@ exports.protect = async (req, res, next) => {
     }
     if (!decoded?.id) return res.status(401).json({ success: false, message: 'Not authorized, token failed' });
     req.user = await User.findById(decoded.id)
-      .select("role status status_reason name email employee_id")
+      .select("role status status_reason name email employee_id +credential_version")
       .lean();
 
     // If not found in Users, check Helper (Customer Care Staff) collection
@@ -48,6 +48,10 @@ exports.protect = async (req, res, next) => {
 
     if (!req.user) {
       return res.status(401).json({ success: false, message: "Account not found" });
+    }
+
+    if (req.user.role === 'ADMIN' && (decoded.credential_version || 0) !== (req.user.credential_version || 0)) {
+      return res.status(401).json({ success: false, message: 'Password changed. Please sign in again.' });
     }
 
     // Security check: Block suspended or banned accounts immediately

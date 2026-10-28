@@ -32,6 +32,8 @@ const deviceSchema = new mongoose.Schema(
     unlink_otp:         { type: String, select: false },
     unlink_otp_expires: { type: Date },
 
+    last_seen_at: { type: Date, default: null },
+
     no_of_connection: { type: Number, default: 0 },
 
     // Firmware tracking
