@@ -45,6 +45,7 @@ const auditLogSchema = new mongoose.Schema(
  */
 auditLogSchema.index({ category: 1, status: 1, createdAt: -1 });
 auditLogSchema.index({ user_id: 1, createdAt: -1 });
+auditLogSchema.index({ resource_type: 1, resource_id: 1, createdAt: -1, _id: -1 });
 auditLogSchema.index({ ip_address: 1, createdAt: -1 });
 auditLogSchema.index({ 'metadata.source': 1, createdAt: -1 });
 

@@ -9,6 +9,7 @@
  *   - updateDevice: findByIdAndUpdate avoids double round-trip
  */
 const Device = require("../../models/device.model");
+const AuditLog = require("../../models/AuditLog.model");
 const audit  = require("../../security/auditLogger");
 const { sendNotification } = require("../notification.controller");
 const { formatBleAddress, generateRandomCode, findDeviceByIdentifier } = require("../../utils/deviceCrypto");
@@ -126,7 +127,7 @@ exports.getDevices = async (req, res, next) => {
 exports.getDeviceById = async (req, res, next) => {
   try {
     const device = await findDeviceByIdentifier(Device, req.params.id, DEVICE_PROJECTION, [
-      { path: "linked_to",  select: "name email phonenumber" },
+      { path: "linked_to",  select: "name email phonenumber avatar" },
       { path: "unlink_by",  select: "name email" },
       { path: "blocked_by", select: "name email" },
       { path: "retired_by", select: "name email" },
@@ -134,7 +135,11 @@ exports.getDeviceById = async (req, res, next) => {
 
     if (!device) return res.status(404).json({ success: false, message: "Device not found" });
 
-    res.status(200).json({ success: true, data: device });
+    const activity = await AuditLog.find({ resource_type: "Device", resource_id: String(device._id) })
+      .select("createdAt user_id action status")
+      .populate("user_id", "name email")
+      .sort({ createdAt: -1, _id: -1 }).limit(10).lean();
+    res.status(200).json({ success: true, data: { ...device.toObject(), activity } });
   } catch (error) {
     next(error);
   }

@@ -136,6 +136,13 @@ exports.createAppRelease = async (req, res, next) => {
         message: "Version and build_number are required",
       });
     }
+    if (!Number.isSafeInteger(Number(build_number)) || Number(build_number) < 1) {
+      return res.status(400).json({ success: false, message: 'Build number must be a positive whole number matching the APK.' });
+    }
+    const previousBuild = await AppRelease.findOne({ platform }).sort({ build_number: -1 }).select('build_number').lean();
+    if (previousBuild && Number(build_number) <= previousBuild.build_number) {
+      return res.status(400).json({ success: false, message: `Use an APK build number greater than ${previousBuild.build_number}.` });
+    }
 
     // 4. Version Normalization: Remove accidental whitespace and leading "v" or "V"
     //    Example: " v1.2.0 " -> "1.2.0"
@@ -416,10 +423,8 @@ exports.selectFeaturedRelease = async (req, res, next) => {
     release.is_active = true;
     await release.save();
 
-    // 4. Asynchronous Push Notification: Alert active mobile app users
-    waitUntil(releaseNotifier.notifyAppRelease(release).catch((err) => {
-      console.warn("[AppRelease] Notification dispatch error:", err.message);
-    }));
+    // Publication sends the update reminder; featuring does not resend it.
+
 
     // 5. Send HTTP 200 OK
     res.status(200).json({
@@ -442,8 +447,8 @@ exports.selectFeaturedRelease = async (req, res, next) => {
  *
  * HOW THE MOBILE APP USES THIS:
  *  1. Mobile app launches and calls: GET /api/app-releases/latest?current_build=12
- *  2. Server checks if an 'is_featured' release exists; if not, falls back to highest build_number.
- *  3. Server compares: is latest.build_number > current_build?
+ *  2. Server selects the highest published build in the requested channel (stable by default).
+ *  3. Server compares the installed build and checks for any unmet mandatory release.
  *  4. Server responds with:
  *     - update_available: true / false
  *     - is_mandatory: true / false (if true, app locks until updated)
@@ -455,22 +460,14 @@ exports.getLatestAppUpdate = async (req, res, next) => {
     // 1. Extract query parameters sent by the mobile app
     const { platform = "android", channel, current_build } = req.query;
 
-    // 2. Step 1: Check if admin explicitly marked a release as 'is_featured'
-    let latest = await AppRelease.findOne({
-      platform,
-      is_featured: true,
-      is_active: true,
-    }).lean();
-
-    // 3. Step 2: Fallback — If no featured release is selected, pick the highest build_number
-    if (!latest) {
-      const filter = { platform, is_active: true };
-      if (channel) filter.channel = channel;
-
-      latest = await AppRelease.findOne(filter)
-        .sort({ build_number: -1 }) // -1 = Descending order (highest build first)
-        .lean();
-    }
+    // Published updates follow increasing build numbers. Older featured releases
+    // must not hide a newer mandatory update.
+    const filter = { platform, is_active: true, channel: channel || 'stable' };
+    const latest = await AppRelease.findOne(filter).sort({ build_number: -1 }).lean();
+    const currentB = Number(current_build) || 0;
+    const requiredUpdate = await AppRelease.exists({
+      ...filter, is_mandatory: true, build_number: { $gt: currentB },
+    });
 
     // 4. Handle edge case: No active releases exist in the database
     if (!latest) {
@@ -482,7 +479,7 @@ exports.getLatestAppUpdate = async (req, res, next) => {
     }
 
     // 5. Core Comparison Logic: Compare server build number with installed phone build number
-    const currentB = Number(current_build) || 0;
+
     // Example: If server has build 15 and phone has build 12 -> 15 > 12 -> true
     const updateAvailable = latest.build_number > currentB;
 
@@ -497,7 +494,7 @@ exports.getLatestAppUpdate = async (req, res, next) => {
         build_number: latest.build_number,
         platform: latest.platform,
         channel: latest.channel,
-        is_mandatory: latest.is_mandatory,
+        is_mandatory: Boolean(requiredUpdate),
         is_featured: !!latest.is_featured,
         release_notes: latest.release_notes,
         download_url: latest.file_url,

@@ -239,10 +239,8 @@ exports.selectFeaturedFirmware = async (req, res, next) => {
     release.is_active = true;
     await release.save();
 
-    // Broadcast update notification asynchronously to all paired device owners
-    waitUntil(releaseNotifier.notifyFirmwareRelease(release).catch((err) => {
-      console.warn("[FirmwareRelease] Notification dispatch error:", err.message);
-    }));
+    // Publication sends the update reminder; featuring does not resend it.
+
 
     res.status(200).json({
       success: true,

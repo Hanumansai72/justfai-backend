@@ -29,22 +29,23 @@ The Android JSON and backend service account must belong to the same Firebase pr
 
 Rebuild and install the Android app after adding the Android configuration. Sign in and allow Android notifications. Registration is synchronized on sign-in and resume, using the Firebase Installation ID (FID). Logout disables local delivery immediately and removes the server registration on a best-effort basis; account deletion removes registrations in the database.
 
-## 4. Send from admin
+## 4. Publish from admin
 
-Open the admin notification bell, then **View all notifications**. Administrators see **Release push notifications**, Firebase configuration status, and the number of enabled phone registrations.
+Open **App APKs > Publish New APK** or **Firmware > Publish Release**. Publishing automatically saves inbox notifications and sends the short update reminder to registered phones. There is no manual send panel. Featuring an existing release does not resend notifications.
 
-- Select **Device firmware** or **Android APK**, choose an active release, and send.
-- Publishing or featuring releases also triggers notifications automatically.
-- Firmware recipients are active users owning paired, unblocked devices. Android APK recipients are active app users.
-- Each manual send saves another inbox entry and sends again; it is intended for deliberate announcements/resends.
-
-The result distinguishes Firebase acceptance from failures. Acceptance is not proof that Android displayed the message. Notifications require Android permission; force-stopped apps cannot receive until reopened. Tapping an update opens the device or notifications screen after sign-in and device connection, respecting the app's device gate.
+- Use the version and build number actually embedded in the APK. Android build numbers must increase.
+- Select **Require update before app use** for a mandatory APK release. The app checks at startup and resume, opens a dedicated update screen when a notification is tapped, and blocks normal pages until the installed build meets the requirement. Opening the download does not unlock it. Android still requires the user to confirm APK installation.
+- A known mandatory release is cached so a failed check does not bypass the requirement. On a cold start the Android app waits for a successful release check; if unavailable it offers retry instead of normal app access.
+- The latest stable published build is the update target. An older featured release cannot hide a newer mandatory update.
+- Notifications show only a short reminder; release notes, version numbers, build numbers, and download URLs are not displayed in notification text.
+- Firmware recipients are active users owning paired, unblocked devices. APK recipients are active app users with enabled registrations. Firmware notification taps open Device Settings once connected.
+- Provider acceptance is not confirmation of Android display. Permission is required, and force-stopped apps receive again only after reopening.
 
 ## Implementation locations
 
 - Backend: `src/services/pushNotification.service.js`, `src/services/releaseNotification.service.js`, `src/controllers/pushNotification.controller.js`, `src/models/PushInstallation.model.js`.
 - App: `lib/core/services/push_notification_service.dart`, `android/app/src/main/kotlin/com/example/justride_ui/JustRidePushService.kt`.
-- Admin: `src/components/common/ReleasePushComposer.jsx`, embedded in the Notifications page.
+- Admin: `src/pages/admin/NewAppRelease.jsx` and `src/pages/admin/NewFirmwareRelease.jsx`; notifications run from backend publication handlers.
 
 Release publication uses Vercel `waitUntil` to keep dispatch work alive after the HTTP response, within the deployment's execution limit. Large broadcasts require a durable worker; this implementation reports bounded batches of 10 concurrent FCM requests and does not claim queued delivery.
 

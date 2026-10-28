@@ -23,7 +23,6 @@ const push = require('./pushNotification.service');
 exports.notifyFirmwareRelease = async (release) => {
   try {
     const versionStr = `v${release.version.replace(/^v/i, "")}`;
-    const channelTag = release.channel ? ` (${release.channel.toUpperCase()})` : "";
 
     // 1. Find all distinct users who have an active paired device
     const owners = await Device.distinct("linked_to", {
@@ -38,10 +37,8 @@ exports.notifyFirmwareRelease = async (release) => {
       return { sent: 0 };
     }
 
-    const title = `New Firmware Update Available: ${versionStr}${channelTag}`;
-    const message = release.release_notes
-      ? `Firmware ${versionStr} is now ready for your JustRide device: ${release.release_notes}`
-      : `Firmware ${versionStr} is ready. Connect your device via Bluetooth in the mobile app to update.`;
+    const title = 'JustRide firmware update';
+    const message = 'A new update is available. Please update your JustRide device.';
 
     // 2. Prepare bulk notification documents
     const notifications = pairedUserIds.map((userId) => ({
@@ -96,7 +93,6 @@ exports.notifyFirmwareRelease = async (release) => {
 exports.notifyAppRelease = async (release) => {
   try {
     const versionStr = `v${release.version.replace(/^v/i, "")}`;
-    const buildTag = release.build_number ? ` (Build #${release.build_number})` : "";
 
     // 1. Find all active end-users
     const users = await User.find({ role: "USER", status: "active" })
@@ -108,10 +104,8 @@ exports.notifyAppRelease = async (release) => {
       return { sent: 0 };
     }
 
-    const title = `New JustRide App Update: ${versionStr}${buildTag}`;
-    const message = release.release_notes
-      ? `A new mobile app version is available: ${release.release_notes}`
-      : `JustRide ${versionStr} is now available. Download the new update for improved performance and features.`;
+    const title = 'JustRide app update';
+    const message = 'A new update is available. Please update the JustRide app.';
 
     // 2. Prepare bulk notification documents
     const notifications = users.map((user) => ({
