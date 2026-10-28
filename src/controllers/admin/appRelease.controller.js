@@ -1,3 +1,4 @@
+const { waitUntil } = require('@vercel/functions');
 /**
  * ============================================================================
  * CONTROLLER: appRelease.controller.js
@@ -203,9 +204,9 @@ exports.createAppRelease = async (req, res, next) => {
 
     // 10. Fire-and-Forget Notification: Alert riders asynchronously without blocking HTTP response
     //     Notice: We do not use 'await' so the admin does not wait 10 seconds for pushes to send
-    releaseNotifier.notifyAppRelease(release).catch((err) => {
+    waitUntil(releaseNotifier.notifyAppRelease(release).catch((err) => {
       console.warn("[AppRelease] Notification dispatch error:", err.message);
-    });
+    }));
 
     // 11. Send HTTP 201 Created with the saved release data
     res.status(201).json({
@@ -416,9 +417,9 @@ exports.selectFeaturedRelease = async (req, res, next) => {
     await release.save();
 
     // 4. Asynchronous Push Notification: Alert active mobile app users
-    releaseNotifier.notifyAppRelease(release).catch((err) => {
+    waitUntil(releaseNotifier.notifyAppRelease(release).catch((err) => {
       console.warn("[AppRelease] Notification dispatch error:", err.message);
-    });
+    }));
 
     // 5. Send HTTP 200 OK
     res.status(200).json({

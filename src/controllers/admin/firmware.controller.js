@@ -1,3 +1,4 @@
+const { waitUntil } = require('@vercel/functions');
 /**
  * admin/firmware.controller.js
  *
@@ -76,9 +77,9 @@ exports.createFirmwareRelease = async (req, res, next) => {
     });
 
     // Broadcast update notification asynchronously to all paired device owners
-    releaseNotifier.notifyFirmwareRelease(release).catch((err) => {
+    waitUntil(releaseNotifier.notifyFirmwareRelease(release).catch((err) => {
       console.warn("[FirmwareRelease] Notification dispatch error:", err.message);
-    });
+    }));
 
     res.status(201).json({ success: true, message: "Firmware release published successfully to Cloudflare R2", data: release });
   } catch (error) {
@@ -239,9 +240,9 @@ exports.selectFeaturedFirmware = async (req, res, next) => {
     await release.save();
 
     // Broadcast update notification asynchronously to all paired device owners
-    releaseNotifier.notifyFirmwareRelease(release).catch((err) => {
+    waitUntil(releaseNotifier.notifyFirmwareRelease(release).catch((err) => {
       console.warn("[FirmwareRelease] Notification dispatch error:", err.message);
-    });
+    }));
 
     res.status(200).json({
       success: true,

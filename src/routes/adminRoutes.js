@@ -147,6 +147,9 @@ router.post("/support/:id/block-device",            authorize("ADMIN", "HELPER")
 router.post("/support/:id/force-unlink-device",     authorize("ADMIN", "HELPER"), forceUnlinkDeviceFromTicket);
 
 // Staff Notification Inbox & Alerts (For ADMIN & HELPER)
+const releasePush = require('../controllers/pushNotification.controller');
+router.get('/notifications/push-status', authorize('ADMIN'), releasePush.status);
+router.post('/notifications/release-push', authorize('ADMIN'), releasePush.sendRelease);
 router.get("/notifications",                        authorize("ADMIN", "HELPER"), adminCache('notifications'), getStaffNotifications);
 router.get("/notifications/unread-count",           authorize("ADMIN", "HELPER"), adminCache('notifications'), getStaffUnreadCount);
 router.patch("/notifications/:id/read",             authorize("ADMIN", "HELPER"), markStaffNotificationRead);

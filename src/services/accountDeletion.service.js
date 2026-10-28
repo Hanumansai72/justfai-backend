@@ -38,6 +38,7 @@ async function retireAccount(userId, challenge) {
     await require('../models/Notification.model').deleteMany({ $or: [
       { user_id: userId }, { recipient_id: userId, recipient_model: 'User' },
     ] }, { session });
+    await require('../models/PushInstallation.model').deleteMany({ user_id: userId }, { session });
     await require('../models/FirmwareHistory.model').updateMany(
       { initiated_by: userId }, { $set: { initiated_by: null } }, { session });
   });

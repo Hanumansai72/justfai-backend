@@ -8,11 +8,12 @@
  *       • Firmware: Broadcasts to all users who own a paired IoT device
  *       • Mobile APK: Broadcasts to all active app users (role: 'USER')
  *   - Automatic device tracking flag updates (firmware_update_available: true)
- *   - Push Notification Hooks (FCM / APNs payload structure ready)
+ *   - Android notification-bar delivery through Firebase Cloud Messaging
  */
 const User         = require("../models/User");
 const Device       = require("../models/device.model");
 const Notification = require("../models/Notification.model");
+const push = require('./pushNotification.service');
 
 /**
  * Dispatch firmware release notifications to all device owners
@@ -25,10 +26,12 @@ exports.notifyFirmwareRelease = async (release) => {
     const channelTag = release.channel ? ` (${release.channel.toUpperCase()})` : "";
 
     // 1. Find all distinct users who have an active paired device
-    const pairedUserIds = await Device.distinct("linked_to", {
+    const owners = await Device.distinct("linked_to", {
       is_paired: true,
+      is_blocked: { $ne: true },
       linked_to: { $ne: null },
     });
+    const pairedUserIds = await User.distinct('_id', { _id: { $in: owners }, role: 'USER', status: 'active' });
 
     if (!pairedUserIds || pairedUserIds.length === 0) {
       console.log("[ReleaseNotifier] No paired device users found to notify for firmware release.");
@@ -77,7 +80,8 @@ exports.notifyFirmwareRelease = async (release) => {
     );
 
     console.log(`[ReleaseNotifier] Successfully dispatched firmware notification for ${versionStr} to ${result.length} device owners.`);
-    return { sent: result.length };
+    const delivery = await push.sendToUsers(pairedUserIds, { title, message, type: 'FIRMWARE_UPDATE', releaseId: release._id });
+    return { sent: result.length, push: delivery };
   } catch (err) {
     console.error("[ReleaseNotifier] Error broadcasting firmware release notification:", err.message);
     return { error: err.message };
@@ -136,7 +140,10 @@ exports.notifyAppRelease = async (release) => {
     const result = await Notification.insertMany(notifications, { ordered: false });
 
     console.log(`[ReleaseNotifier] Successfully dispatched app APK release notification for ${versionStr} to ${result.length} users.`);
-    return { sent: result.length };
+    const delivery = release.platform === 'android'
+      ? await push.sendToUsers(users.map((user) => user._id), { title, message, type: 'APP_UPDATE', releaseId: release._id })
+      : { configured: push.isConfigured(), registered: 0, accepted: 0, failed: 0 };
+    return { sent: result.length, push: delivery };
   } catch (err) {
     console.error("[ReleaseNotifier] Error broadcasting app release notification:", err.message);
     return { error: err.message };
