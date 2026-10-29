@@ -17,7 +17,7 @@ const {
 } = require("../controllers/support.controller");
 
 // All support and reporting routes require authentication
-router.use(protect, userLimiter);
+router.use(protect, authorize("USER"), userLimiter);
 router.post('/help-feedback', authorize('USER'), help.saveFeedback);
 router.post('/attachments', authorize('USER'), uploadLimiter, upload.single('image'), help.uploadAttachment);
 router.post('/tickets', authorize('USER'), help.createTicket);
@@ -33,4 +33,5 @@ router.get("/my-tickets",          getMyTickets);
 router.get("/tickets/:id",         getTicketDetails);
 router.post("/tickets/:id/messages", addTicketMessage);
 
+require('../security/sanitize').sanitizeParams(router);
 module.exports = router;

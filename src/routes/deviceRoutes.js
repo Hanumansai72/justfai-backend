@@ -69,4 +69,5 @@ router.get("/:id/firmware/history", getFirmwareHistory);
 router.post("/:id/firmware/update", firmwareLimiter, validate.recordFirmwareUpdate, recordFirmwareUpdate);
 router.patch("/:id/firmware/set-latest", authorize("ADMIN"), setLatestFirmware);
 
+require('../security/sanitize').sanitizeParams(router);
 module.exports = router;

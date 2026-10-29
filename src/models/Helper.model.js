@@ -13,6 +13,7 @@ const bcrypt = require("bcryptjs");
 
 const helperSchema = new mongoose.Schema(
   {
+    credential_version: { type: Number, default: 0, select: false },
     employee_id: {
       type: String,
       required: [true, "Employee ID is required"],

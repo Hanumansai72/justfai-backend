@@ -1,9 +1,10 @@
 /**
  * security/sanitize.js
  * Express 5 compatible input sanitization.
- * Operates in-place on req.body, req.query, and req.params without replacing property getters.
+ * Operates in-place on req.body, req.query, and req.params while retaining sanitized query values.
  */
 const xss = require("xss");
+const credentialKeys = new Set(["password", "newPassword", "currentPassword", "oldPassword", "confirmPassword"]);
 
 // Recursive in-place sanitizer to preserve Express 5 request getters
 const sanitizeObjectInPlace = (target, options = {}) => {
@@ -13,14 +14,15 @@ const sanitizeObjectInPlace = (target, options = {}) => {
     // 1. Mongo Operator Injection Check ($ and .)
     if (options.stripMongo && (key.startsWith("$") || key.includes("."))) {
       const cleanKey = key.replace(/^\$|\./g, "_");
-      target[cleanKey] = sanitizeObjectInPlace(target[key], options);
+      if (!['__proto__', 'constructor', 'prototype'].includes(cleanKey)) target[cleanKey] = sanitizeObjectInPlace(target[key], options);
       delete target[key];
       continue;
     }
 
+    if (['__proto__', 'constructor', 'prototype'].includes(key)) { delete target[key]; continue; }
     const val = target[key];
     if (typeof val === "string") {
-      if (options.stripXss) {
+      if (options.stripXss && !credentialKeys.has(key)) {
         target[key] = xss(val);
       }
     } else if (Array.isArray(val)) {
@@ -43,13 +45,14 @@ const sanitizeMongo = (req, res, next) => {
       sanitizeObjectInPlace(req.body, { stripMongo: true });
     }
     if (req.query && typeof req.query === "object") {
-      sanitizeObjectInPlace(req.query, { stripMongo: true });
+      const query = sanitizeObjectInPlace(req.query, { stripMongo: true });
+      Object.defineProperty(req, 'query', { value: query, configurable: true, writable: true, enumerable: true });
     }
     if (req.params && typeof req.params === "object") {
       sanitizeObjectInPlace(req.params, { stripMongo: true });
     }
   } catch (err) {
-    console.warn("[Sanitize:Mongo] Error during sanitization:", err.message);
+    return next(Object.assign(new Error("Invalid request payload"), { statusCode: 400 }));
   }
   next();
 };
@@ -67,9 +70,19 @@ const sanitizeXss = (req, res, next) => {
       sanitizeObjectInPlace(req.params, { stripXss: true });
     }
   } catch (err) {
-    console.warn("[Sanitize:XSS] Error during sanitization:", err.message);
+    return next(Object.assign(new Error("Invalid request payload"), { statusCode: 400 }));
   }
   next();
 };
 
-module.exports = { sanitizeMongo, sanitizeXss };
+const sanitizeParams = router => {
+  const names = new Set(router.stack.flatMap(layer => {
+    const paths = Array.isArray(layer.route?.path) ? layer.route.path : [layer.route?.path];
+    return paths.filter(path => typeof path === 'string').flatMap(path => [...path.matchAll(/[:*]([A-Za-z_][A-Za-z0-9_]*)/g)].map(match => match[1]));
+  }));
+  for (const name of names) router.param(name, (req, res, next, value) => {
+    const values = { value }; sanitizeObjectInPlace(values, { stripMongo: true, stripXss: true });
+    req.params[name] = values.value; next();
+  });
+};
+module.exports = { sanitizeMongo, sanitizeXss, sanitizeParams };

@@ -29,12 +29,13 @@ const hashToken = (token) =>
  * Generate a short-lived access token (15m).
  * @param {Object} user - User document or plain object
  */
-const generateAccessToken = (user) => {
+const generateAccessToken = (user, sessionId) => {
   return jwt.sign(
     {
       id: user._id || user.id,
       role: user.role || "USER",
-      ...(user.role === "ADMIN" && { credential_version: user.credential_version || 0 }),
+      credential_version: user.credential_version || 0,
+      ...(sessionId && { sid: sessionId }),
     },
     ACCESS_SECRET,
     { expiresIn: ACCESS_EXPIRE }
@@ -45,12 +46,14 @@ const generateAccessToken = (user) => {
  * Generate a long-lived refresh token (30d) with unique JTI.
  * @param {Object} user - User document or plain object
  */
-const generateRefreshToken = (user) => {
+const generateRefreshToken = (user, sessionId) => {
   const jti = crypto.randomBytes(16).toString("hex");
   return jwt.sign(
     {
       id: user._id || user.id,
       jti,
+      credential_version: user.credential_version || 0,
+      ...(sessionId && { sid: sessionId }),
     },
     REFRESH_SECRET,
     { expiresIn: REFRESH_EXPIRE }

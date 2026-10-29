@@ -23,7 +23,7 @@ exports.getDashboardStats = async (req, res, next) => {
           { $eq: ['$is_retired', false] },
         ];
         const [userRows, deviceRows, ticketRows, recentPairings] = await Promise.all([
-          User.aggregate([{ $group: {
+          User.aggregate([{ $match: { role: 'USER', status: { $ne: 'deleted' } } }, { $group: {
             _id: null,
             total: { $sum: 1 },
             active: countWhen({ $eq: ['$status', 'active'] }),

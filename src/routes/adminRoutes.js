@@ -55,6 +55,10 @@ router.post('/activity', authorize('ADMIN', 'HELPER'), recordAdminActivity);
 router.get("/me",              authorize("ADMIN", "HELPER"), getAdminProfile);
 router.put("/credentials",     authorize("ADMIN", "HELPER"), updateAdminCredentials);
 
+const adminSessions = require('../controllers/admin/sessions.controller');
+router.get('/profile/sessions', authorize('ADMIN'), adminSessions.list);
+router.delete('/profile/sessions/:sessionId', authorize('ADMIN'), adminSessions.revoke);
+
 const adminPassword = require('../controllers/admin/password.controller');
 router.post('/profile/password/otp', authorize('ADMIN'), otpSendLimiter, adminPassword.requestOtp);
 router.post('/profile/password', authorize('ADMIN'), otpVerifyLimiter, adminPassword.changePassword);
@@ -161,4 +165,5 @@ router.get("/audit-logs",                            authorize("ADMIN", "HELPER"
 router.get("/audit-logs/stats",                      authorize("ADMIN", "HELPER"), getAuditStats);
 router.get("/audit-logs/:id",                        authorize("ADMIN", "HELPER"), getAuditLogById);
 
+require('../security/sanitize').sanitizeParams(router);
 module.exports = router;

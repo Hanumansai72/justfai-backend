@@ -5,8 +5,9 @@ module.exports = (schema, { groups }) => {
   const invalidate = async function (result) {
     // Queue polling and updates matching no documents must not flush hot caches.
     if (result === null && this.getOptions && !this.getOptions().upsert) return;
-    if (result?.modifiedCount === 0 && !result.upsertedCount) return;
-    if (result?.deletedCount === 0) return;
+    const counts = ['modifiedCount', 'upsertedCount', 'insertedCount', 'deletedCount'];
+    if (counts.some(key => typeof result?.[key] === 'number') &&
+        !counts.some(key => (result[key] || 0) > 0)) return;
     if (Array.isArray(result) && result.length === 0) return;
     await cache.invalidate(groups);
   };

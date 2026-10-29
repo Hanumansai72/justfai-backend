@@ -3,6 +3,7 @@ const mongoose = require("mongoose");
 const deviceSchema = new mongoose.Schema(
   {
     devicename: { type: String, trim: true },
+    device_type: { type: String, trim: true, default: null },
     device_version: { type: String, trim: true },
     serialnumber: { type: String, trim: true },
 

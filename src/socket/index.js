@@ -1,3 +1,5 @@
+const { authenticateAccessToken } = require('../security/session');
+const presenceService = require('../services/presence.service');
 /**
  * socket/index.js
  * Scalable Socket.IO Server initialization with Redis Pub/Sub adapter.
@@ -10,9 +12,6 @@
 const { Server } = require("socket.io");
 const { createAdapter } = require("@socket.io/redis-adapter");
 const Redis = require("ioredis");
-const jwt = require("jsonwebtoken");
-const User = require("../models/User");
-const Helper = require("../models/Helper.model");
 const { redisConfig } = require("../config/redis");
 const registerChatHandlers = require("./chat.socket");
 
@@ -58,10 +57,9 @@ const initSocket = (httpServer) => {
     try {
       let token =
         socket.handshake.auth?.token ||
-        socket.handshake.headers?.authorization ||
-        socket.handshake.query?.token;
+        socket.handshake.headers?.authorization;
 
-      if (token && token.toLowerCase().startsWith("bearer ")) {
+      if (typeof token === 'string' && token.toLowerCase().startsWith("bearer ")) {
         token = token.split(" ")[1];
       }
 
@@ -69,28 +67,8 @@ const initSocket = (httpServer) => {
         return next(new Error("Authentication error: No token provided"));
       }
 
-      // Verify JWT
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      if (!decoded || !decoded.id) {
-        return next(new Error("Authentication error: Invalid token"));
-      }
-
-      // Fetch user from DB
-      let user = await User.findById(decoded.id).select("name email role status avatar").lean();
-      if (!user) {
-        user = await Helper.findById(decoded.id).select("name email role status avatar").lean();
-      }
-
-      if (!user) {
-        return next(new Error("Authentication error: User account not found"));
-      }
-
-      if (user.status && user.status !== "active") {
-        return next(new Error(`Authentication error: Account is ${user.status}`));
-      }
-
-      // Attach user payload to socket
-      socket.user = user;
+      socket.user = await authenticateAccessToken(token);
+      socket.accessToken = token;
       next();
     } catch (err) {
       return next(new Error(`Authentication error: ${err.message}`));
@@ -101,7 +79,20 @@ const initSocket = (httpServer) => {
   // Connection Handler
   // ─────────────────────────────────────────────
   io.on("connection", (socket) => {
-    // Register chat event listeners
+    if (socket.user.role === 'ADMIN') socket.join(`admin-session:${socket.user.admin_session_id}`);
+    socket.use(async (packet, next) => {
+      try {
+        Object.assign(socket.user, await authenticateAccessToken(socket.accessToken));
+        await presenceService.refreshHeartbeat(String(socket.user._id));
+        next();
+      } catch { next(new Error('Session expired or revoked.')); socket.disconnect(true); }
+    });
+    const heartbeat = setInterval(async () => {
+      try { await authenticateAccessToken(socket.accessToken); await presenceService.setUserOnline(String(socket.user._id), socket.id); }
+      catch { socket.disconnect(true); }
+    }, 60000);
+    heartbeat.unref?.();
+    socket.on('disconnect', () => clearInterval(heartbeat));
     registerChatHandlers(io, socket);
   });
 

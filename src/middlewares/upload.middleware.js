@@ -28,7 +28,7 @@ const fileFilter = (req, file, cb) => {
     cb(null, true);
   } else {
     cb(
-      new Error("Invalid file. Only JPEG, PNG, and WebP images with valid extensions are allowed."),
+      Object.assign(new Error("Invalid file. Only JPEG, PNG, and WebP images with valid extensions are allowed."), { statusCode: 400 }),
       false
     );
   }

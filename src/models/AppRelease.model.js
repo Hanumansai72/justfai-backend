@@ -9,7 +9,6 @@ const appReleaseSchema = new mongoose.Schema(
     version: {
       type: String,
       required: [true, "App version is required"],
-      unique: true,
       trim: true,
     },
     build_number: {
@@ -84,6 +83,7 @@ const appReleaseSchema = new mongoose.Schema(
   }
 );
 
+appReleaseSchema.index({ platform: 1, version: 1 }, { unique: true });
 appReleaseSchema.index({ platform: 1, channel: 1, is_active: 1, build_number: -1 });
 
 appReleaseSchema.plugin(require('./plugins/invalidateAdminCache'), { groups: ['releases'] });

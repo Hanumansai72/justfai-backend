@@ -70,6 +70,7 @@ exports.getUploadUrl = async (req, res, next) => {
 
     // 3. Sanitization (Regex): Replace all spaces and illegal characters with underscores
     //    /[^a-zA-Z0-9._-]/g matches any character that is NOT a letter, number, dot, or hyphen
+    if (typeof filename !== 'string' || filename.length > 200 || !/\.(apk|aab)$/i.test(filename)) return res.status(400).json({ success: false, message: 'A valid Android package filename is required.' });
     const cleanFilename = filename.replace(/[^a-zA-Z0-9._-]/g, "_");
 
     // 4. Collision Prevention: Prefix the path with Date.now() (current millisecond timestamp)
@@ -139,6 +140,8 @@ exports.createAppRelease = async (req, res, next) => {
     if (!Number.isSafeInteger(Number(build_number)) || Number(build_number) < 1) {
       return res.status(400).json({ success: false, message: 'Build number must be a positive whole number matching the APK.' });
     }
+    if (!['android', 'ios'].includes(platform) || !['stable', 'beta', 'alpha'].includes(channel) ||
+        typeof version !== 'string' || version.length > 64 || !/^[0-9A-Za-z][0-9A-Za-z._-]*$/.test(version)) return res.status(400).json({ success: false, message: 'Invalid version, platform or channel.' });
     const previousBuild = await AppRelease.findOne({ platform }).sort({ build_number: -1 }).select('build_number').lean();
     if (previousBuild && Number(build_number) <= previousBuild.build_number) {
       return res.status(400).json({ success: false, message: `Use an APK build number greater than ${previousBuild.build_number}.` });
@@ -267,7 +270,7 @@ exports.getAppReleases = async (req, res, next) => {
       // Fetch the actual documents for this page
       AppRelease.find(filter)
         // Populate author information (like an SQL JOIN on the User model)
-        .populate("released_by", "full_name email")
+        .populate("released_by", "name email")
         // Show the newest uploaded releases first in the admin list.
         .sort({ createdAt: -1, _id: -1 })
         // Skip previous pages

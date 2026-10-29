@@ -1,3 +1,4 @@
+const isNewerVersion = require('../utils/isNewerVersion');
 /**
  * releaseNotification.service.js
  * High-Performance Notification Dispatcher for Firmware & Mobile App APK Releases.
@@ -22,16 +23,19 @@ const push = require('./pushNotification.service');
  */
 exports.notifyFirmwareRelease = async (release) => {
   try {
+    if (release.channel !== 'stable') return { sent: 0, skipped: 'NON_STABLE_RELEASE' };
     const versionStr = `v${release.version.replace(/^v/i, "")}`;
 
     // 1. Find all distinct users who have an active paired device
-    const owners = await Device.distinct("linked_to", {
-      is_paired: true,
-      is_blocked: { $ne: true },
-      linked_to: { $ne: null },
-    });
+    const eligibleDevices = await Device.find({ is_paired: true, is_active: true,
+      is_blocked: { $ne: true }, is_retired: { $ne: true }, linked_to: { $ne: null } })
+      .select('_id linked_to firmware_version latest_firmware device_type').lean();
+    const targets = eligibleDevices.filter(device =>
+      (!release.device_type || device.device_type === release.device_type) &&
+      isNewerVersion(device.firmware_version, release.version) &&
+      (!device.latest_firmware || device.latest_firmware === release.version || isNewerVersion(device.latest_firmware, release.version)));
+    const owners = targets.map(device => device.linked_to);
     const pairedUserIds = await User.distinct('_id', { _id: { $in: owners }, role: 'USER', status: 'active' });
-
     if (!pairedUserIds || pairedUserIds.length === 0) {
       console.log("[ReleaseNotifier] No paired device users found to notify for firmware release.");
       return { sent: 0 };
@@ -65,16 +69,16 @@ exports.notifyFirmwareRelease = async (release) => {
     const result = await Notification.insertMany(notifications, { ordered: false });
 
     // 4. Mark active devices as having a firmware update available
-    await Device.updateMany(
-      { is_paired: true, linked_to: { $ne: null } },
-      {
-        $set: {
-          latest_firmware: release.version,
-          firmware_update_available: true,
-          last_firmware_check: new Date(),
-        },
-      }
-    );
+    const activeOwners = new Set(pairedUserIds.map(String));
+    await Device.bulkWrite(targets.filter(device => activeOwners.has(String(device.linked_to))).map(device => ({
+      updateOne: {
+        filter: { _id: device._id, linked_to: device.linked_to, is_paired: true, is_active: true,
+          is_blocked: { $ne: true }, is_retired: { $ne: true },
+          firmware_version: device.firmware_version ?? null, latest_firmware: device.latest_firmware ?? null },
+        update: { $set: { latest_firmware: release.version, firmware_update_available: true, last_firmware_check: new Date() } },
+      },
+    })));
+
 
     console.log(`[ReleaseNotifier] Successfully dispatched firmware notification for ${versionStr} to ${result.length} device owners.`);
     const delivery = await push.sendToUsers(pairedUserIds, { title, message, type: 'FIRMWARE_UPDATE', releaseId: release._id });
@@ -92,6 +96,7 @@ exports.notifyFirmwareRelease = async (release) => {
  */
 exports.notifyAppRelease = async (release) => {
   try {
+    if (release.channel !== 'stable') return { sent: 0, skipped: 'NON_STABLE_RELEASE' };
     const versionStr = `v${release.version.replace(/^v/i, "")}`;
 
     // 1. Find all active end-users

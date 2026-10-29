@@ -12,16 +12,13 @@ const apkUpload = multer({
     fileSize: 150 * 1024 * 1024, // 150 MB max APK size
   },
   fileFilter: (req, file, cb) => {
-    const isApk =
-      file.originalname.endsWith(".apk") ||
-      file.originalname.endsWith(".aab") ||
-      file.mimetype === "application/vnd.android.package-archive" ||
-      file.mimetype === "application/octet-stream";
+    const isApk = /\.(apk|aab)$/i.test(file.originalname) &&
+      ['application/vnd.android.package-archive', 'application/octet-stream', 'application/zip'].includes(file.mimetype);
 
     if (isApk) {
       cb(null, true);
     } else {
-      cb(new Error("Only .apk or .aab Android packages are allowed"), false);
+      cb(Object.assign(new Error("Only .apk or .aab Android packages are allowed"), { statusCode: 400 }), false);
     }
   },
 });

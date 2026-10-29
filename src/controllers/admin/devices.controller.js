@@ -1,3 +1,4 @@
+const escapeRegex = require('../../utils/escapeRegex');
 /**
  * admin/devices.controller.js
  *
@@ -14,7 +15,7 @@ const audit  = require("../../security/auditLogger");
 const { sendNotification } = require("../notification.controller");
 const { formatBleAddress, generateRandomCode, findDeviceByIdentifier } = require("../../utils/deviceCrypto");
 
-const DEVICE_PROJECTION = "-pairing_code -unlink_otp -__v";
+const DEVICE_PROJECTION = "-pairing_code -unlink_otp -device_secret -device_hash -__v";
 
 // ─────────────────────────────────────────────
 // @desc    Register / provision a new device (Admin)
@@ -50,6 +51,7 @@ exports.registerDevice = async (req, res, next) => {
     const device = await Device.create({
       devicename:       devicename || "Smart Ride Device",
       device_version,
+      device_type: req.body.device_type || null,
       firmware_version: firmware_version || device_version || null,
       serialnumber,
       BLE_ADDRESS:      normalizedBle,
@@ -90,7 +92,7 @@ exports.getDevices = async (req, res, next) => {
     if (req.query.is_retired !== undefined) filter.is_retired = req.query.is_retired === "true";
     if (req.query.is_active  !== undefined) filter.is_active  = req.query.is_active  === "true";
     if (req.query.search) {
-      const rx = new RegExp(req.query.search.trim(), "i");
+      const rx = new RegExp(escapeRegex(req.query.search.trim()), 'i');
       filter.$or = [{ device_id: rx }, { devicename: rx }, { BLE_ADDRESS: rx }, { serialnumber: rx }];
     }
 
@@ -156,6 +158,7 @@ exports.updateDevice = async (req, res, next) => {
     const { devicename, device_version, serialnumber, is_active } = req.body;
     if (devicename     !== undefined) allowed.devicename     = devicename;
     if (device_version !== undefined) allowed.device_version = device_version;
+    if (req.body.device_type !== undefined) allowed.device_type = req.body.device_type;
     if (serialnumber   !== undefined) allowed.serialnumber   = serialnumber;
     if (is_active      !== undefined) allowed.is_active      = is_active;
 
@@ -249,8 +252,8 @@ exports.blockDevice = async (req, res, next) => {
 // ─────────────────────────────────────────────
 exports.unblockDevice = async (req, res, next) => {
   try {
-    const device = await Device.findByIdAndUpdate(
-      req.params.id,
+    const device = await Device.findOneAndUpdate(
+      { _id: req.params.id, is_retired: { $ne: true } },
       {
         $set:   { is_blocked: false, is_active: true },
         $unset: { block_reason: "", blocked_at: "", blocked_by: "" },

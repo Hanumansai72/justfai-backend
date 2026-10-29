@@ -16,7 +16,7 @@ const QUEUE_NAME = "notification-queue";
 
 let notificationQueue = null;
 
-if (process.env.ENABLE_REDIS === "true") {
+if (process.env.ENABLE_REDIS === "true" && process.env.VERCEL !== "1") {
   try {
     notificationQueue = new Queue(QUEUE_NAME, {
       connection: redisConfig,
@@ -44,7 +44,7 @@ if (process.env.ENABLE_REDIS === "true") {
  * Dispatch customer notification job.
  */
 const enqueueNotification = async ({ user_id, type, title, message, data = {} }) => {
-  if (notificationQueue && isRedisConnected()) {
+  if (notificationQueue && isRedisConnected() && process.env.VERCEL !== '1') {
     try {
       const job = await notificationQueue.add(
         type,
@@ -160,7 +160,7 @@ const notifyTicketReply = async ({ ticket, customer, messageText }) => {
   return await enqueueStaffNotification({
     type: "TICKET_CUSTOMER_REPLY",
     title: `Reply on Ticket [${ticket.ticket_number}]`,
-    message: `${customer.name || "Customer"} replied: "${messageText.slice(0, 120)}..."`,
+    message: `${customer.name || "Customer"} replied: "${String(messageText || "").slice(0, 120)}${String(messageText || "").length > 120 ? "..." : ""}"`,
     data: {
       ticket_id:     ticket._id,
       ticket_number: ticket.ticket_number,

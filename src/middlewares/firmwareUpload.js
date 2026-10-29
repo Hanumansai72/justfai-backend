@@ -12,15 +12,12 @@ const firmwareUpload = multer({
     fileSize: 16 * 1024 * 1024, // 16 MB max firmware size
   },
   fileFilter: (req, file, cb) => {
-    // Allow .bin, application/octet-stream, or application/macbinary
-    if (
-      file.originalname.endsWith(".bin") ||
-      file.mimetype === "application/octet-stream" ||
-      file.mimetype === "application/x-binary"
+    if (typeof file.originalname === 'string' && file.originalname.toLowerCase().endsWith('.bin') &&
+      ['application/octet-stream', 'application/x-binary', 'application/macbinary'].includes(file.mimetype)
     ) {
       cb(null, true);
     } else {
-      cb(new Error("Only .bin firmware binary files are allowed"), false);
+      cb(Object.assign(new Error("Only .bin firmware binary files are allowed"), { statusCode: 400 }), false);
     }
   },
 });

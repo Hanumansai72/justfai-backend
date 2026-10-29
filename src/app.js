@@ -26,9 +26,10 @@ const earlyInterestRoutes = require("./routes/earlyInterestRoutes");
 const app = express();
 
 // Trust reverse proxies (Vercel, Render, Cloudflare, AWS, Nginx)
-app.set("trust proxy", process.env.TRUST_PROXY
-  ? process.env.TRUST_PROXY.split(",").map(value => value.trim())
-  : process.env.VERCEL === "1" ? 1 : false);
+const proxy = process.env.TRUST_PROXY?.trim();
+app.set('trust proxy', !proxy ? (process.env.VERCEL === '1' ? 1 : false)
+  : proxy === 'true' ? true : proxy === 'false' ? false
+  : /^\d+$/.test(proxy) ? Number(proxy) : proxy.split(',').map(value => value.trim()));
 
 // ─────────────────────────────────────────────────────────────
 // Security Headers
@@ -80,14 +81,11 @@ app.use(sanitizeXss);
 // ─────────────────────────────────────────────────────────────
 // Ensure Database Connected (Critical for Serverless/Cloud Lambdas)
 // ─────────────────────────────────────────────────────────────
-const mongoose = require("mongoose");
 const connectDB = require("./config/db");
 
 app.use(async (req, res, next) => {
   try {
-    if (mongoose.connection.readyState !== 1) {
-      await connectDB();
-    }
+    await connectDB();
     next();
   } catch (err) {
     next(err);

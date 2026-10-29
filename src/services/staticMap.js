@@ -44,7 +44,7 @@ async function reserveMapRequest(store = getStore()) {
   // failed attempts count conservatively. A rolling day avoids timezone-reset assumptions.
   for (const [name, windowMs, limit] of [['second', 1000, 2], ['minute', 60000, 60], ['day', 86400000, budget]]) {
     const result = await store.consume(`locationiq:account:${name}`, { windowMs, limit });
-    if (!result.allowed) return Math.ceil(result.resetMs / 1000);
+    if (!result.allowed) return Math.max(1, Math.ceil(Number(result.resetMs) / 1000) || 1);
   }
   return 0;
 }

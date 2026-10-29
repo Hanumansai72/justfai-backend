@@ -20,4 +20,4 @@ async function sendAdminLoginAlert({ account, ip, req, at = new Date() }) {
   }) });
 }
 
-module.exports = { sendAdminLoginAlert };
+module.exports = { sendAdminLoginAlert, loginLocation };

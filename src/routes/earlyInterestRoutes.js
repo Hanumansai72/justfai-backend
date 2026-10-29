@@ -58,4 +58,5 @@ router.get('/', protect, authorize('ADMIN', 'HELPER'), adminReadLimiter,
   } catch (error) { next(error); }
 });
 
+require('../security/sanitize').sanitizeParams(router);
 module.exports = router;

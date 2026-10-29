@@ -1,3 +1,5 @@
+const { waitUntil } = require('@vercel/functions');
+const escapeRegex = require('../../utils/escapeRegex');
 /**
  * admin/support.controller.js
  *
@@ -26,12 +28,14 @@ exports.getSupportTickets = async (req, res, next) => {
       filter.status = req.query.status;
     if (req.query.priority && ["low", "medium", "high", "critical"].includes(req.query.priority))
       filter.priority = req.query.priority;
+    if (req.query.assigned_to !== undefined && (typeof req.query.assigned_to !== 'string' || (req.query.assigned_to !== 'me' && !require('mongoose').isValidObjectId(req.query.assigned_to)))) return res.status(400).json({ success: false, message: 'Invalid staff filter.' });
     // "me" shorthand — show only tickets assigned to the requesting admin
     if (req.query.assigned_to) {
       filter.assigned_to = req.query.assigned_to === "me" ? req.user._id : req.query.assigned_to;
     }
+    if (req.query.search !== undefined && typeof req.query.search !== 'string') return res.status(400).json({ success: false, message: 'Invalid search.' });
     if (req.query.search) {
-      const rx = new RegExp(req.query.search.trim(), "i");
+      const rx = new RegExp(escapeRegex(req.query.search.trim()), 'i');
       filter.$or = [{ subject: rx }, { ticket_number: rx }];
     }
 
@@ -117,6 +121,8 @@ exports.updateSupportTicket = async (req, res, next) => {
       setOps.priority = priority;
     }
 
+    if (assigned_to && (typeof assigned_to !== 'string' || !require('mongoose').isValidObjectId(assigned_to))) return res.status(400).json({ success: false, message: 'Invalid staff identifier.' });
+    if (message !== undefined && (typeof message !== 'string' || !message.trim() || message.length > 5000)) return res.status(400).json({ success: false, message: 'Provide a message up to 5000 characters.' });
     if (assigned_to !== undefined) setOps.assigned_to = assigned_to || null;
 
     /**
@@ -175,6 +181,7 @@ exports.updateSupportTicket = async (req, res, next) => {
 exports.blockDeviceFromTicket = async (req, res, next) => {
   try {
     const { reason = "Blocked by customer support investigation" } = req.body;
+    if (typeof reason !== 'string' || !reason.trim() || reason.length > 1000) return res.status(400).json({ success: false, message: 'Provide a reason up to 1000 characters.' });
 
     const ticket = await SupportTicket.findById(req.params.id);
     if (!ticket) return res.status(404).json({ success: false, message: "Ticket not found" });
@@ -190,8 +197,8 @@ exports.blockDeviceFromTicket = async (req, res, next) => {
       });
     }
 
-    const device = await Device.findByIdAndUpdate(
-      targetDeviceId,
+    const device = await Device.findOneAndUpdate(
+      { _id: targetDeviceId, linked_to: ticket.user_id },
       {
         $set: {
           is_blocked:   true,
@@ -204,7 +211,7 @@ exports.blockDeviceFromTicket = async (req, res, next) => {
       { new: true, select: "devicename device_id BLE_ADDRESS is_blocked" }
     ).lean();
 
-    if (!device) return res.status(404).json({ success: false, message: "Device not found" });
+    if (!device) return res.status(409).json({ success: false, message: 'The device is no longer linked to this ticket owner.' });
 
     // Append system message to ticket chat thread
     ticket.messages.push({
@@ -216,13 +223,13 @@ exports.blockDeviceFromTicket = async (req, res, next) => {
     await ticket.save();
 
     // Notify customer
-    await sendNotification({
+    waitUntil(sendNotification({
       user_id: ticket.user_id,
       type: "SECURITY_ALERT",
       title: "Device Blocked by Support",
       message: `Your device (${device.devicename || device.device_id}) has been temporarily blocked for security.`,
       data: { device_id: device.device_id, ticket_number: ticket.ticket_number },
-    });
+    }).catch(() => console.warn("[Notification] DISPATCH_FAILED")));
 
     audit.log({
       req, category: "ADMIN", action: "SUPPORT_BLOCK_DEVICE", status: "SUCCESS",
@@ -261,17 +268,19 @@ exports.forceUnlinkDeviceFromTicket = async (req, res, next) => {
       });
     }
 
-    const device = await Device.findById(targetDeviceId).select("_id devicename device_id BLE_ADDRESS is_paired linked_to");
-    if (!device) return res.status(404).json({ success: false, message: "Device not found" });
+    const device = await Device.findOne({ _id: targetDeviceId, linked_to: ticket.user_id }).select("_id devicename device_id BLE_ADDRESS is_paired linked_to");
+    if (!device) return res.status(409).json({ success: false, message: 'The device is no longer linked to this ticket owner.' });
 
     // Atomic wipe of pairing credentials
-    await Device.updateOne(
-      { _id: device._id },
+    const unlinkResult = await Device.updateOne(
+      { _id: device._id, linked_to: ticket.user_id },
       {
         $set:   { is_paired: false, linked_to: null, unlink_date: new Date(), unlink_by: req.user._id },
         $unset: { device_hash: "", pairing_code: "", unlink_otp: "", unlink_otp_expires: "" },
       }
     );
+
+    if (!unlinkResult.matchedCount) return res.status(409).json({ success: false, message: 'Device ownership changed. Refresh the ticket.' });
 
     // Append resolution action to ticket conversation
     ticket.messages.push({
@@ -284,13 +293,13 @@ exports.forceUnlinkDeviceFromTicket = async (req, res, next) => {
     await ticket.save();
 
     // Notify customer
-    await sendNotification({
+    waitUntil(sendNotification({
       user_id: ticket.user_id,
       type: "DEVICE_DISCONNECTED",
       title: "Device Unlinked by Support",
       message: `Your device (${device.devicename || device.device_id}) was unlinked by customer support as requested. You may now pair it with any account.`,
       data: { device_id: device.device_id, ticket_number: ticket.ticket_number },
-    });
+    }).catch(() => console.warn("[Notification] DISPATCH_FAILED")));
 
     audit.log({
       req, category: "ADMIN", action: "SUPPORT_FORCE_UNLINK_DEVICE", status: "SUCCESS",

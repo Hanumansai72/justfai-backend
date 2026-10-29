@@ -1,3 +1,4 @@
+const escapeRegex = require('../../utils/escapeRegex');
 const { waitUntil } = require('@vercel/functions');
 /**
  * admin/firmware.controller.js
@@ -33,6 +34,8 @@ exports.createFirmwareRelease = async (req, res, next) => {
       return res.status(400).json({ success: false, message: "version is required" });
     }
 
+    if (typeof version !== 'string' || version.length > 64 || !/^[0-9A-Za-z][0-9A-Za-z._-]*$/.test(version) ||
+        (device_type != null && (typeof device_type !== 'string' || device_type.length > 100))) return res.status(400).json({ success: false, message: 'Invalid release version or device type.' });
     const cleanVersion = version.trim().replace(/^v/i, "");
 
     // 1. Duplicate check
@@ -47,7 +50,7 @@ exports.createFirmwareRelease = async (req, res, next) => {
 
     // 2. If a physical .bin file was uploaded in the request, stream to Cloudflare R2
     if (req.file) {
-      const fileName = `firmware/v${cleanVersion}-${(device_type || "justride").toLowerCase().replace(/\s+/g, "_")}.bin`;
+      const fileName = `firmware/v${cleanVersion}-${(device_type || "justride").toLowerCase().replace(/[^a-z0-9_-]/g, "_")}.bin`;
       const uploadRes = await cloudflareR2.uploadFirmware(req.file.buffer, fileName);
       file_url = uploadRes.url;
       checksum = uploadRes.sha256;
@@ -104,7 +107,7 @@ exports.getFirmwareReleases = async (req, res, next) => {
     if (req.query.is_active !== undefined)
       filter.is_active = req.query.is_active === "true";
     if (req.query.device_type)
-      filter.device_type = new RegExp(req.query.device_type.trim(), "i");
+      filter.device_type = new RegExp(escapeRegex(req.query.device_type.trim()), 'i');
 
     const [total, releases] = await Promise.all([
       FirmwareRelease.countDocuments(filter),
@@ -196,9 +199,11 @@ exports.deleteFirmwareRelease = async (req, res, next) => {
         { _id: release._id },
         { $set: { is_active: false, channel: "deprecated" } }
       );
+      audit.log({ req, category: 'FIRMWARE', action: 'FIRMWARE_RELEASE_DEPRECATE', status: 'SUCCESS',
+        resource_type: 'Firmware', resource_id: release._id, message: `Firmware deprecated: ${release.version}` });
       return res.status(200).json({
         success: true,
-        message: `Firmware v${release.version} deprecated (${deviceOnVersion._id ? "devices still on this version" : ""})`,
+        message: `Firmware v${release.version} deprecated (devices still on this version)`,
       });
     }
 
@@ -272,11 +277,7 @@ exports.getLatestPublicFirmware = async (req, res, next) => {
     if (!latest) {
       return res.status(200).json({
         success: true,
-        data: {
-          version: "2.5.4",
-          channel: "stable",
-          release_notes: "20% Faster Roundabout calculation • Improved Sunlight Auto-dim curve",
-        },
+        data: null,
       });
     }
 

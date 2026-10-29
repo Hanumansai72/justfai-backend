@@ -1,3 +1,5 @@
+const verifyGoogleIdentity = require('../services/googleIdentity.service');
+const { waitUntil } = require('@vercel/functions');
 const User = require("../models/User");
 const { OAuth2Client } = require("google-auth-library");
 const audit = require("../security/auditLogger");
@@ -78,93 +80,17 @@ const issueTokensAndRespond = async (res, user, statusCode = 200, customMessage 
 // ─────────────────────────────────────────────
 exports.googleAuth = async (req, res, next) => {
   try {
-    const { id_token, token, credential, code, redirect_uri, access_token } = req.body;
-    const googleIdToken = id_token || credential || (token && token.length > 200 ? token : null);
-    const googleAccessToken = access_token || (token && token.length <= 200 ? token : null);
-
     let payload;
-
-    if (googleIdToken) {
-      try {
-        const allowedAudiences = [
-          process.env.GOOGLE_CLIENT_ID,
-          process.env.GOOGLE_ANDROID_CLIENT_ID,
-          "445835744041-sst8cp392ski2jtbkno6p16438kq8r0d.apps.googleusercontent.com",
-        ].filter(Boolean);
-
-        const ticket = await googleClient.verifyIdToken({
-          idToken: googleIdToken,
-          audience: allowedAudiences.length > 1 ? allowedAudiences : allowedAudiences[0],
-        });
-        payload = ticket.getPayload();
-      } catch (err) {
-        // Resilient Fallback 1: Query Google's tokeninfo endpoint
-        try {
-          const resp = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(googleIdToken)}`);
-          if (resp.ok) {
-            payload = await resp.json();
-          }
-        } catch (_) {}
-
-        // Resilient Fallback 2: Test as access_token against userinfo
-        if (!payload?.email) {
-          try {
-            const userResp = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
-              headers: { Authorization: `Bearer ${googleIdToken}` },
-            });
-            if (userResp.ok) {
-              payload = await userResp.json();
-            }
-          } catch (_) {}
-        }
-
-        if (!payload?.email) {
-          return res.status(400).json({ success: false, message: "Invalid Google ID token" });
-        }
-      }
-    } else if (googleAccessToken) {
-      try {
-        const resp = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
-          headers: { Authorization: `Bearer ${googleAccessToken}` },
-        });
-        if (resp.ok) {
-          payload = await resp.json();
-        }
-      } catch (err) {
-        return res.status(400).json({ success: false, message: "Failed to verify Google access token" });
-      }
-    } else if (code) {
-      try {
-        const { tokens } = await googleClient.getToken({
-          code,
-          redirect_uri: redirect_uri || process.env.GOOGLE_REDIRECT_URI || "postmessage",
-        });
-        if (tokens.id_token) {
-          const ticket = await googleClient.verifyIdToken({
-            idToken: tokens.id_token,
-            audience: process.env.GOOGLE_CLIENT_ID,
-          });
-          payload = ticket.getPayload();
-        } else if (tokens.access_token) {
-          const resp = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
-            headers: { Authorization: `Bearer ${tokens.access_token}` },
-          });
-          payload = await resp.json();
-        }
-      } catch (err) {
-        return res.status(400).json({ success: false, message: "Failed to exchange Google authorization code" });
-      }
-    } else {
-      return res.status(400).json({ success: false, message: "Provide a Google 'id_token' or 'access_token'" });
-    }
-
-    if (!payload?.email) {
-      return res.status(400).json({ success: false, message: "Could not retrieve user profile from Google" });
+    try { payload = await verifyGoogleIdentity(googleClient, req.body || {}); }
+    catch (error) {
+      return res.status(error.statusCode === 503 ? 503 : 400).json({ success: false,
+        message: error.statusCode === 503 ? 'Google sign-in is not configured.' : 'Invalid Google sign-in credential.' });
     }
 
     const { sub: google_id, email, name, picture: avatar } = payload;
 
-    let user = await User.findOne({ $or: [{ google_id }, { email }] });
+    let user = await User.findOne({ $or: [{ google_id }, { email }] }).select("+credential_version");
+    if (user && user.role !== 'USER') return res.status(403).json({ success: false, message: 'Staff must sign in through the staff portal.' });
     if (user?.status === 'deleted') {
       return res.status(403).json({ success: false, message: 'This account was deleted. Its email cannot be used again.' });
     }
@@ -180,19 +106,9 @@ exports.googleAuth = async (req, res, next) => {
         auth_provider: "google",
         role: "USER",
       });
-      await notifyNewUser(user);
-    } else if (!user.google_id) {
-      await User.updateOne(
-        { _id: user._id },
-        {
-          $set: {
-            google_id,
-            auth_provider: "google",
-            ...((!user.avatar && avatar) ? { avatar } : {}),
-          },
-        }
-      );
-      user.google_id = google_id;
+      waitUntil(Promise.resolve().then(() => notifyNewUser(user)).catch(() => console.warn('[Notification] DISPATCH_FAILED')));
+    } else if (user.google_id !== google_id) {
+      return res.status(409).json({ success: false, message: 'Sign in using your existing account credentials. Google account linking requires a verified account-linking flow.' });
     }
 
     if (user.status && user.status !== "active") {
@@ -227,14 +143,14 @@ exports.register = async (req, res, next) => {
   try {
     const { name, phonenumber, email, password } = req.body;
 
-    const exists = await User.exists({ $or: [{ email }, { phonenumber }] });
+    const exists = await User.exists({ $or: [{ email }, ...(phonenumber ? [{ phonenumber }] : [])] });
     if (exists) {
       return res.status(409).json({ success: false, message: "Email or phone number already in use" });
     }
 
     const user = await User.create({ name, phonenumber, email, password, role: "USER" });
-    await notifyNewUser(user);
-    await sendEmail({ to: user.email, ...accountConfirmation(user.name) });
+    waitUntil(Promise.resolve().then(() => notifyNewUser(user)).catch(() => console.warn('[Notification] DISPATCH_FAILED')));
+    waitUntil(Promise.resolve().then(() => sendEmail({ to: user.email, ...accountConfirmation(user.name) })).catch(() => console.warn('[Email] CONFIRMATION_FAILED')));
 
     audit.log({
       req,
@@ -261,7 +177,7 @@ exports.login = async (req, res, next) => {
   try {
     const { email, password } = req.body;
 
-    const user = await User.findOne({ email }).select("+password");
+    const user = await User.findOne({ email, role: "USER" }).select("+password +credential_version");
 
     if (!user || !(await user.matchPassword(password))) {
       return res.status(401).json({ success: false, message: "Invalid credentials" });
@@ -316,7 +232,9 @@ exports.refreshToken = async (req, res, next) => {
     const hashedIncomingToken = hashToken(rawRefreshToken);
 
     // Fetch user including hidden refresh_tokens array
-    const user = await User.findById(decoded.id).select("+refresh_tokens +credential_version");
+    let Model = User;
+    let user = await Model.findById(decoded.id).select("+refresh_tokens +credential_version");
+    if (!user) { Model = require("../models/Helper.model"); user = await Model.findById(decoded.id).select("+refresh_tokens +credential_version"); }
 
     if (!user) {
       clearTokenCookies(res);
@@ -331,6 +249,14 @@ exports.refreshToken = async (req, res, next) => {
       });
     }
 
+    if ((decoded.credential_version || 0) !== (user.credential_version || 0)) {
+      clearTokenCookies(res);
+      return res.status(401).json({ success: false, message: "Session revoked. Please sign in again." });
+    }
+    const versionFilter = user.credential_version
+      ? { credential_version: user.credential_version }
+      : { $or: [{ credential_version: 0 }, { credential_version: { $exists: false } }] };
+
     // ── REUSE DETECTION (RFC 6749 / OAuth 2.0 Security BCP) ──
     const tokenExists = user.refresh_tokens?.some(
       (t) => t.token === hashedIncomingToken
@@ -338,7 +264,8 @@ exports.refreshToken = async (req, res, next) => {
 
     if (!tokenExists) {
       // Token reuse detected! Invalidate all existing sessions for this account
-      await User.updateOne({ _id: user._id }, { $set: { refresh_tokens: [] } });
+      await Model.updateOne({ _id: user._id, ...versionFilter }, { $set: { refresh_tokens: [] }, $inc: { credential_version: 1 } });
+      require("../security/session").disconnectUser(user._id);
       clearTokenCookies(res);
 
       audit.log({
@@ -357,29 +284,27 @@ exports.refreshToken = async (req, res, next) => {
       });
     }
 
+    if (user.role === 'ADMIN' && !user.refresh_tokens?.some(session => session.token === hashedIncomingToken &&
+      session.scope === 'admin' && typeof decoded.sid === 'string' && session.session_id === decoded.sid && session.expires_at > new Date())) {
+      clearTokenCookies(res);
+      return res.status(401).json({ success: false, message: 'Admin session ended. Please sign in again.' });
+    }
+
     // Generate fresh access & refresh tokens (Rotation)
-    const newAccessToken  = generateAccessToken(user);
-    const newRefreshToken = generateRefreshToken(user);
+    const newAccessToken  = generateAccessToken(user, decoded.sid);
+    const newRefreshToken = generateRefreshToken(user, decoded.sid);
     const hashedNewToken  = hashToken(newRefreshToken);
 
-    // Rotate: Remove old hashed token and add the new one atomically
-    await User.updateOne(
-      { _id: user._id },
-      {
-        $pull: { refresh_tokens: { token: hashedIncomingToken } },
-      }
+    // One conditional write ensures concurrent requests cannot reuse the same token.
+    const rotated = await Model.updateOne(
+      { _id: user._id, ...versionFilter, "refresh_tokens.token": hashedIncomingToken, status: "active" },
+      { $set: { "refresh_tokens.$[session].token": hashedNewToken, "refresh_tokens.$[session].created_at": new Date() } },
+      { arrayFilters: [{ "session.token": hashedIncomingToken }] }
     );
-    await User.updateOne(
-      { _id: user._id },
-      {
-        $push: {
-          refresh_tokens: {
-            $each: [{ token: hashedNewToken, created_at: new Date() }],
-            $slice: -5,
-          },
-        },
-      }
-    );
+    if (!rotated.modifiedCount) {
+      clearTokenCookies(res);
+      return res.status(401).json({ success: false, message: "Session changed. Please sign in again." });
+    }
 
     // Set updated HTTP-only cookies
     setTokenCookies(res, newAccessToken, newRefreshToken);
@@ -416,21 +341,25 @@ exports.logout = async (req, res, next) => {
     const rawRefreshToken = req.cookies?.refreshToken || req.body?.refreshToken;
     const { logoutAll } = req.body || {};
 
-    if (rawRefreshToken) {
-      const hashedToken = hashToken(rawRefreshToken);
-
-      if (logoutAll && req.user?._id) {
-        // Clear all active sessions
-        await User.updateOne({ _id: req.user._id }, { $set: { refresh_tokens: [] } });
-      } else {
-        // Remove only the specific refresh token session
-        await User.updateOne(
-          { "refresh_tokens.token": hashedToken },
-          { $pull: { refresh_tokens: { token: hashedToken } } }
-        );
-      }
-    } else if (req.user?._id && logoutAll) {
-      await User.updateOne({ _id: req.user._id }, { $set: { refresh_tokens: [] } });
+    if (rawRefreshToken && typeof rawRefreshToken !== 'string') return res.status(400).json({ success: false, message: 'Invalid refresh token.' });
+    if (logoutAll) {
+      let decoded; try { decoded = verifyRefreshToken(rawRefreshToken); }
+      catch { return res.status(401).json({ success: false, message: 'A valid refresh token is required to sign out all sessions.' }); }
+      const filter = { _id: decoded.id, 'refresh_tokens.token': hashToken(rawRefreshToken) };
+      const Helper = require('../models/Helper.model');
+      let Model = User;
+      let account = await User.findOne(filter).select('name email role');
+      if (!account) { Model = Helper; account = await Helper.findOne(filter).select('name email role'); }
+      if (!account) return res.status(401).json({ success: false, message: 'Session is no longer active.' });
+      const revoked = await Model.updateOne(filter, { $set: { refresh_tokens: [] }, $inc: { credential_version: 1 } });
+      if (!revoked.matchedCount) return res.status(401).json({ success: false, message: 'Session is no longer active.' });
+      req.auditActor = account;
+      require('../security/session').disconnectUser(account._id);
+    } else if (rawRefreshToken) {
+      const filter = { 'refresh_tokens.token': hashToken(rawRefreshToken) };
+      const change = { $pull: { refresh_tokens: { token: hashToken(rawRefreshToken) } } };
+      await User.updateOne(filter, change);
+      await require('../models/Helper.model').updateOne(filter, change);
     }
 
     clearTokenCookies(res);
@@ -487,7 +416,9 @@ exports.updateProfile = async (req, res, next) => {
     const allowed = {};
     if (req.body.name)        allowed.name        = req.body.name;
     if (req.body.phonenumber) allowed.phonenumber = req.body.phonenumber;
-    if (req.body.email)       allowed.email       = req.body.email;
+    if (req.body.email !== undefined && (typeof req.body.email !== 'string' || req.body.email.trim().toLowerCase() !== req.user.email)) {
+      return res.status(400).json({ success: false, message: 'Changing email requires email ownership verification.' });
+    }
 
     const user = await User.findByIdAndUpdate(
       req.user._id,
@@ -618,7 +549,7 @@ exports.resetPassword = async (req, res, next) => {
       role: { $ne: "ADMIN" },
       password_reset_token: hashedToken,
       password_reset_expires: { $gt: new Date() },
-    });
+    }).select("+credential_version");
 
     if (!user) {
       return res.status(400).json({
@@ -629,11 +560,13 @@ exports.resetPassword = async (req, res, next) => {
 
     // Invalidate old sessions on password reset for security
     user.password = password;
+    user.credential_version = (user.credential_version || 0) + 1;
     user.password_reset_token = undefined;
     user.password_reset_expires = undefined;
     user.refresh_tokens = [];
 
     await user.save();
+    require('../security/session').disconnectUser(user._id);
 
     audit.log({
       req,
@@ -645,7 +578,7 @@ exports.resetPassword = async (req, res, next) => {
       message: `Password reset completed for: ${user.email}`,
     });
 
-    await sendEmail({ to: user.email, ...passwordChanged(user.name) });
+    waitUntil(Promise.resolve().then(() => sendEmail({ to: user.email, ...passwordChanged(user.name) })).catch(() => console.warn('[Email] PASSWORD_NOTICE_FAILED')));
     return await issueTokensAndRespond(res, user, 200, "Password reset successful. You are now logged in.");
   } catch (error) {
     next(error);
@@ -663,7 +596,7 @@ exports.changePassword = async (req, res, next) => {
       message: 'Use Admin Profile and email OTP to change the admin password.' });
     const { currentPassword, newPassword } = req.body;
 
-    const user = await User.findById(req.user._id).select("+password");
+    const user = await User.findById(req.user._id).select("+password +credential_version");
 
     if (!user) {
       return res.status(404).json({ success: false, message: "User not found" });
@@ -671,12 +604,12 @@ exports.changePassword = async (req, res, next) => {
 
     if (!user.password && user.auth_provider === "google") {
       user.password = newPassword;
+      user.credential_version = (user.credential_version || 0) + 1;
+      user.refresh_tokens = [];
       await user.save();
+      require('../security/session').disconnectUser(user._id);
 
-      return res.status(200).json({
-        success: true,
-        message: "Password set successfully for your account.",
-      });
+      return await issueTokensAndRespond(res, user, 200, 'Password set successfully for your account.');
     }
 
     const isMatch = await user.matchPassword(currentPassword);
@@ -685,9 +618,11 @@ exports.changePassword = async (req, res, next) => {
     }
 
     user.password = newPassword;
+    user.credential_version = (user.credential_version || 0) + 1;
     // Invalidate other refresh tokens on password change
     user.refresh_tokens = [];
     await user.save();
+    require('../security/session').disconnectUser(user._id);
 
     audit.log({
       req,

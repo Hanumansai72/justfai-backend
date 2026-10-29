@@ -32,9 +32,9 @@ exports.sendToUsers = async (userIds, { title, message, type, releaseId }) => {
           url: `https://fcm.googleapis.com/v1/projects/${credentials.project_id}/messages:send`,
           method: 'POST', timeout: 10000, retry: false,
           data: { message: {
-            fid,
-            data: { title: title.slice(0, 120), body: message.slice(0, 500), type, release_id: String(releaseId) },
-            android: { priority: 'HIGH', ttl: '86400s', restricted_package_name: 'com.example.justride_ui' },
+            token: fid,
+            data: { title: title.slice(0, 120), body: message.slice(0, 500), type, ...(releaseId != null && { release_id: String(releaseId) }) },
+            android: { priority: 'HIGH', ttl: '86400s', restricted_package_name: process.env.ANDROID_PACKAGE_NAME || 'com.example.justride_ui' },
           } },
         });
         result.accepted++;

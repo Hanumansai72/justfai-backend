@@ -23,4 +23,5 @@ router.get('/static', protect, authorize('USER'), userReadLimiter, async (req, r
     return res.set('Retry-After', '60').status(503).json({ message: 'Map service unavailable' });
   }
 });
+require('../security/sanitize').sanitizeParams(router);
 module.exports = router;

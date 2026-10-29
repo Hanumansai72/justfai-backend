@@ -8,14 +8,14 @@ const crypto = require("crypto");
 
 class CloudflareR2Service {
   constructor() {
-    const accountId = process.env.R2_ACCOUNT_ID || "b3fa96c6b0ba76781ad13a88da5aafde";
-    const accessKeyId = process.env.R2_ACCESS_KEY_ID || "836dfd83f52625dbac7fcd7e1c777af3";
-    const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY || "46a2467b0464c310e7996710e8cfd444217d8301d6a16fe700a1c573644909b6";
+    const accountId = process.env.R2_ACCOUNT_ID;
+    const accessKeyId = process.env.R2_ACCESS_KEY_ID;
+    const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
 
-    this.bucketName = process.env.R2_BUCKET_NAME || "justride";
-    this.publicDomain = process.env.R2_PUBLIC_DOMAIN || "https://pub-8ae75bb9134b4bf7ad3bdadf97c3ec21.r2.dev";
+    this.bucketName = process.env.R2_BUCKET_NAME;
+    this.publicDomain = process.env.R2_PUBLIC_DOMAIN;
 
-    if (accountId && accessKeyId && secretAccessKey) {
+    if (accountId && accessKeyId && secretAccessKey && this.bucketName && this.publicDomain) {
       this.client = new S3Client({
         region: "auto",
         endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
@@ -42,14 +42,7 @@ class CloudflareR2Service {
     const hash = crypto.createHash("sha256").update(fileBuffer).digest("hex");
     const size = fileBuffer.length;
 
-    if (!this.isConfigured) {
-      // Fallback local mock URL if R2 credentials are not yet populated in .env
-      return {
-        url: `${this.publicDomain}/${fileName}`,
-        sha256: hash,
-        size,
-      };
-    }
+    if (!this.isConfigured) throw Object.assign(new Error('Cloudflare R2 is not configured'), { statusCode: 503 });
 
     const command = new PutObjectCommand({
       Bucket: this.bucketName,
@@ -77,13 +70,7 @@ class CloudflareR2Service {
     const hash = crypto.createHash("sha256").update(fileBuffer).digest("hex");
     const size = fileBuffer.length;
 
-    if (!this.isConfigured) {
-      return {
-        url: `${this.publicDomain}/${fileName}`,
-        sha256: hash,
-        size,
-      };
-    }
+    if (!this.isConfigured) throw Object.assign(new Error('Cloudflare R2 is not configured'), { statusCode: 503 });
 
     const command = new PutObjectCommand({
       Bucket: this.bucketName,

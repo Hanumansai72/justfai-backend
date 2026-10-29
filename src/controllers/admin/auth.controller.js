@@ -1,3 +1,4 @@
+const escapeRegex = require('../../utils/escapeRegex');
 /**
  * controllers/admin/auth.controller.js
  * Admin & Customer Support Helper Staff Authentication & Management Suite.
@@ -10,7 +11,7 @@
  *   - Admin Self-Credential Management
  */
 const { waitUntil } = require('@vercel/functions');
-const { sendAdminLoginAlert } = require('../../services/adminLoginAlert.service');
+const { sendAdminLoginAlert, loginLocation } = require('../../services/adminLoginAlert.service');
 const Admin  = require("../../models/Admin.model");
 const Helper = require("../../models/Helper.model");
 const audit  = require("../../security/auditLogger");
@@ -19,6 +20,7 @@ const {
   generateAccessToken,
   generateRefreshToken,
   hashToken,
+  verifyRefreshToken,
   setTokenCookies,
   clearTokenCookies,
 } = require("../../utils/tokenManager");
@@ -29,7 +31,7 @@ const formatStaffResponse = (account, isHelper = false) => ({
   name:        account.name,
   email:       account.email,
   username:    account.username || null,
-  role:        account.role,
+  role:        isHelper ? "HELPER" : account.role,
   status:      account.status,
   ...(isHelper && {
     employee_id:            account.employee_id,
@@ -87,7 +89,7 @@ exports.adminLogin = async (req, res, next) => {
           { username: lowerIdentifier },
           { email: lowerIdentifier },
         ],
-      }).select("+password +refresh_tokens");
+      }).select("+password +refresh_tokens +credential_version");
 
       if (account) isHelper = true;
     }
@@ -129,8 +131,9 @@ exports.adminLogin = async (req, res, next) => {
     }
 
     // Issue tokens and rotate sessions
-    const accessToken  = generateAccessToken(account);
-    const refreshToken = generateRefreshToken(account);
+    const sessionId = isHelper ? undefined : require('node:crypto').randomUUID();
+    const accessToken  = generateAccessToken(account, sessionId);
+    const refreshToken = generateRefreshToken(account, sessionId);
     const hashedToken  = hashToken(refreshToken);
 
     const Model = isHelper ? Helper : Admin;
@@ -139,7 +142,10 @@ exports.adminLogin = async (req, res, next) => {
       {
         $push: {
           refresh_tokens: {
-            $each: [{ token: hashedToken, created_at: new Date() }],
+            $each: [{ token: hashedToken, created_at: new Date(), ...(sessionId && {
+              session_id: sessionId, scope: 'admin', signed_in_at: new Date(), expires_at: new Date(verifyRefreshToken(refreshToken).exp * 1000),
+              ip: audit.getClientIp(req), user_agent: String(req.get('user-agent') || '').slice(0, 500), location: loginLocation(req),
+            }) }],
             $slice: -5,
           },
         },
@@ -149,7 +155,7 @@ exports.adminLogin = async (req, res, next) => {
     setTokenCookies(res, accessToken, refreshToken);
     req.auditSessionId = hashToken(accessToken);
     if (!isHelper) {
-      await notifyAdminSignIn({ account, ip: audit.getClientIp(req), userAgent: req.get("user-agent") });
+      waitUntil(notifyAdminSignIn({ account, ip: audit.getClientIp(req), userAgent: req.get("user-agent") }).catch(() => console.warn("[Notification] DISPATCH_FAILED")));
       // Keep SMTP off the login response path and alive on serverless deployments.
       waitUntil(sendAdminLoginAlert({ account, req, ip: audit.getClientIp(req) })
         .catch(() => console.warn('[AdminLoginEmail] DELIVERY_FAILED')));
@@ -186,9 +192,11 @@ exports.adminLogin = async (req, res, next) => {
 exports.adminLogout = async (req, res, next) => {
   try {
     const refreshToken = req.cookies?.refreshToken;
-    if (refreshToken) {
-      const Model = req.user.role === 'ADMIN' ? Admin : Helper;
-      await Model.updateOne({ _id: req.user._id }, {
+    if (req.user.role === 'ADMIN') {
+      await Admin.updateOne({ _id: req.user._id }, { $pull: { refresh_tokens: { session_id: req.user.admin_session_id, scope: 'admin' } } });
+      require('../../security/session').disconnectAdminSession(req.user.admin_session_id);
+    } else if (refreshToken) {
+      await Helper.updateOne({ _id: req.user._id }, {
         $pull: { refresh_tokens: { token: hashToken(refreshToken) } },
       });
     }
@@ -247,7 +255,7 @@ exports.updateAdminCredentials = async (req, res, next) => {
       success: false, message: 'Use the email OTP password-change flow in Admin Profile.' });
     const Model = isHelper ? Helper : Admin;
 
-    const account = await Model.findById(req.user._id).select("+password");
+    const account = await Model.findById(req.user._id).select("+password +credential_version");
     if (!account) {
       return res.status(404).json({ success: false, message: "Account not found" });
     }
@@ -297,9 +305,12 @@ exports.updateAdminCredentials = async (req, res, next) => {
         return res.status(400).json({ success: false, message: "New password must be at least 6 characters" });
       }
       account.password = newPassword;
+      account.credential_version = (account.credential_version || 0) + 1;
+      account.refresh_tokens = [];
     }
 
     await account.save();
+    if (newPassword) require('../../security/session').disconnectUser(account._id);
 
     audit.log({
       req, category: "ADMIN", action: "STAFF_CREDENTIALS_UPDATE", status: "SUCCESS",
@@ -348,8 +359,7 @@ exports.createHelperUser = async (req, res, next) => {
     // Auto-generate employee_id if not explicitly provided (e.g. EMP-000101)
     let assignedEmployeeId = employee_id ? String(employee_id).trim().toUpperCase() : null;
     if (!assignedEmployeeId) {
-      const count = await Helper.countDocuments();
-      assignedEmployeeId = `EMP-${String(count + 1001).padStart(6, "0")}`;
+      assignedEmployeeId = `EMP-${require('node:crypto').randomUUID().replaceAll('-', '').slice(0, 16).toUpperCase()}`;
     }
 
     // Check duplicate employee ID, email, username
@@ -410,7 +420,7 @@ exports.getHelperUsers = async (req, res, next) => {
     if (req.query.role)   filter.role   = req.query.role.toUpperCase();
     if (req.query.status) filter.status = req.query.status;
     if (req.query.search) {
-      const rx = new RegExp(req.query.search.trim(), "i");
+      const rx = new RegExp(escapeRegex(req.query.search.trim()), 'i');
       filter.$or = [{ name: rx }, { email: rx }, { employee_id: rx }, { username: rx }];
     }
 
@@ -492,14 +502,15 @@ exports.updateHelperStatus = async (req, res, next) => {
 
     const updated = await Helper.findByIdAndUpdate(
       req.params.id,
-      { $set: allowed },
-      { new: true }
+      { $set: { ...allowed, refresh_tokens: [] }, $inc: { credential_version: 1 } },
+      { new: true, runValidators: true }
     ).lean();
 
     if (!updated) {
       return res.status(404).json({ success: false, message: "Staff member not found" });
     }
 
+    require('../../security/session').disconnectUser(updated._id);
     audit.log({
       req, category: "ADMIN", action: "HELPER_STATUS_UPDATE", status: "SUCCESS",
       resource_type: "Helper", resource_id: req.params.id,

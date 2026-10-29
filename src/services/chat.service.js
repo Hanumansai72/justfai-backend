@@ -1,3 +1,5 @@
+const ownedAttachments = require('../utils/ownedAttachments');
+const { waitUntil } = require('@vercel/functions');
 /**
  * services/chat.service.js
  * Scalable chat business logic:
@@ -52,20 +54,22 @@ class ChatService {
    * @param {string} [params.clientMsgId]
    */
   async saveMessage({ ticketId, sender, body, attachments = [], clientMsgId = null }) {
-    if (!body || !body.trim()) {
-      const err = new Error("Message body cannot be empty");
+    if (typeof body !== 'string' || !body.trim() || body.length > 5000) {
+      const err = new Error(typeof body === "string" && body.trim() ? "Message body cannot exceed 5000 characters" : "Message body cannot be empty");
       err.statusCode = 400;
       throw err;
     }
 
     const senderId = sender._id || sender.id;
+    const safeAttachments = ownedAttachments(attachments, senderId);
+    if (!safeAttachments) throw Object.assign(new Error('Attach up to three screenshots uploaded by your account.'), { statusCode: 400 });
     const senderRole = sender.role === "ADMIN" || sender.role === "HELPER" ? "ADMIN" : "USER";
 
     const newMessage = {
       sender_id: senderId,
       sender_role: senderRole,
       body: body.trim(),
-      attachments: Array.isArray(attachments) ? attachments : [],
+      attachments: safeAttachments,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -80,7 +84,7 @@ class ChatService {
           updatedAt: new Date(),
         },
       },
-      { new: true, select: { messages: { $slice: -1 }, user_id: 1, ticket_number: 1, subject: 1 } }
+      { new: true, select: { messages: { $slice: -1 }, user_id: 1, ticket_number: 1, subject: 1, assigned_to: 1 } }
     ).populate("messages.sender_id", "name avatar role");
 
     if (!updatedTicket || !updatedTicket.messages.length) {
@@ -96,18 +100,16 @@ class ChatService {
       ? (updatedTicket.assigned_to ? updatedTicket.assigned_to.toString() : null)
       : updatedTicket.user_id.toString();
 
-    if (recipientUserId) {
-      await presenceService.incrementUnread(ticketId, recipientUserId);
-    }
+    if (recipientUserId) waitUntil(presenceService.incrementUnread(ticketId, recipientUserId).catch(() => {}));
 
     // Trigger asynchronous notification queue if sender is customer or staff
     try {
       if (senderRole === "USER") {
-        notifyTicketReply({
+        waitUntil(notifyTicketReply({
           ticket: updatedTicket,
           customer: sender,
           messageText: body,
-        }).catch(() => {});
+        }).catch(() => {}));
       }
     } catch (e) {
       // Non-blocking notification fail
@@ -141,10 +143,10 @@ class ChatService {
    */
   async getTicketMessages({ ticketId, limit = 50, skip = 0 }) {
     const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 100);
-    const parsedSkip = Math.max(parseInt(skip, 10) || 0, 0);
+    const parsedSkip = Math.min(1000000, Math.max(parseInt(skip, 10) || 0, 0));
 
     const ticket = await SupportTicket.findById(ticketId, {
-      messages: { $slice: [-(parsedSkip + parsedLimit), parsedLimit] },
+      messages: { $slice: -(parsedSkip + parsedLimit) },
       ticket_number: 1,
       subject: 1,
       status: 1,
@@ -157,7 +159,7 @@ class ChatService {
       throw err;
     }
 
-    const messages = (ticket.messages || []).map((msg) => {
+    const messages = (ticket.messages || []).slice(0, Math.max(0, (ticket.messages || []).length - parsedSkip)).map((msg) => {
       const senderObj = msg.sender_id && typeof msg.sender_id === "object" ? msg.sender_id : {};
       return {
         _id: msg._id,

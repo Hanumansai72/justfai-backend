@@ -47,6 +47,7 @@ exports.registerDevice = async (req, res, next) => {
     const device = await Device.create({
       devicename:       devicename || "Smart Ride Device",
       device_version,
+      device_type: req.body.device_type || null,
       firmware_version: firmware_version || device_version || null,
       serialnumber,
       BLE_ADDRESS:      normalizedBle,
@@ -178,6 +179,7 @@ exports.updateDevice = async (req, res, next) => {
     // Privileged hardware parameters can only be updated by admins
     if (isAdmin) {
       if (device_version !== undefined) allowed.device_version = device_version;
+      if (req.body.device_type !== undefined) allowed.device_type = req.body.device_type;
       if (serialnumber   !== undefined) allowed.serialnumber   = serialnumber;
       if (is_active      !== undefined) allowed.is_active      = is_active;
     }

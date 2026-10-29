@@ -15,26 +15,20 @@ const SavedAddress = require("../models/Saved_address.model");
  * Accepts: GeoJSON object | [lng, lat] array | { lat, lng } object | flat lat/lng fields.
  */
 const parseCoordinates = (coords, lat, lng) => {
-  if (coords?.type === "Point" && Array.isArray(coords.coordinates)) return coords;
-
-  if (Array.isArray(coords) && coords.length === 2) {
-    const [lo, la] = coords.map(Number);
-    if (!isNaN(lo) && !isNaN(la)) return { type: "Point", coordinates: [lo, la] };
+  const number = value => typeof value === 'number' || (typeof value === 'string' && value.trim() !== '') ? Number(value) : NaN;
+  const point = (lo, la) => {
+    lo = number(lo); la = number(la);
+    return Number.isFinite(lo) && Math.abs(lo) <= 180 && Number.isFinite(la) && Math.abs(la) <= 90
+      ? { type: 'Point', coordinates: [lo, la] } : null;
+  };
+  if (coords?.type === 'Point' && Array.isArray(coords.coordinates) && coords.coordinates.length === 2) {
+    const result = point(...coords.coordinates); if (result) return result;
   }
-
-  if (coords && typeof coords === "object") {
-    const la = Number(coords.latitude ?? coords.lat);
-    const lo = Number(coords.longitude ?? coords.lng);
-    if (!isNaN(la) && !isNaN(lo)) return { type: "Point", coordinates: [lo, la] };
+  if (Array.isArray(coords) && coords.length === 2) { const result = point(...coords); if (result) return result; }
+  if (coords && typeof coords === 'object' && !Array.isArray(coords)) {
+    const result = point(coords.longitude ?? coords.lng, coords.latitude ?? coords.lat); if (result) return result;
   }
-
-  if (lat !== undefined && lng !== undefined) {
-    const la = Number(lat);
-    const lo = Number(lng);
-    if (!isNaN(la) && !isNaN(lo)) return { type: "Point", coordinates: [lo, la] };
-  }
-
-  return null;
+  return point(lng, lat);
 };
 
 // ─────────────────────────────────────────────

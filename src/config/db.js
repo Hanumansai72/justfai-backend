@@ -32,14 +32,17 @@ const connectDB = async () => {
     .then(async (conn) => {
       await require('./verifyAdmin')();
       await require('./auditRetention')();
+      await require('./releaseIndexes')();
       cachedConnection = conn;
       console.log("MongoDB Connected Successfully");
       console.log(`Host: ${conn.connection.host}`);
       console.log(`Database: ${conn.connection.name}`);
       return conn;
     })
-    .catch((error) => {
-      console.error("MongoDB Connection Error:", error.message);
+    .catch(async (error) => {
+      cachedConnection = null;
+      await mongoose.disconnect().catch(() => {});
+      console.error("MongoDB Connection Error:", error.name || "Error");
       if (process.env.NODE_ENV !== "production") {
         // Don't crash serverless container abruptly on temporary network glitch
         console.warn("Retrying on next request...");

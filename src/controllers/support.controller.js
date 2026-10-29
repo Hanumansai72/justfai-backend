@@ -1,3 +1,5 @@
+const ownedAttachments = require('../utils/ownedAttachments');
+const { waitUntil } = require('@vercel/functions');
 /**
  * controllers/support.controller.js
  * User-facing customer support, issue reporting, and feedback endpoints:
@@ -20,9 +22,13 @@ const { notifyNewTicket, notifyTicketReply } = require("../queues/notification.q
 // ─────────────────────────────────────────────
 exports.reportDeviceProblem = async (req, res, next) => {
   try {
-    const { device_id, subject, description, priority = "high", attachments } = req.body;
+    const { device_id, subject, description } = req.body;
+    const priority = 'high';
+    const attachments = ownedAttachments(req.body.attachments, req.user._id);
+    if (!attachments) return res.status(400).json({ success: false, message: 'Attach up to three screenshots uploaded by your account.' });
+    if (device_id != null && (typeof device_id !== 'string' || device_id.length > 100)) return res.status(400).json({ success: false, message: 'Invalid device identifier.' });
 
-    if (!subject || !description) {
+    if (typeof subject !== 'string' || !subject.trim() || subject.length > 200 || typeof description !== 'string' || !description.trim() || description.length > 5000) {
       return res.status(400).json({ success: false, message: "Subject and description are required" });
     }
 
@@ -61,16 +67,16 @@ exports.reportDeviceProblem = async (req, res, next) => {
     });
 
     // Notify user
-    await sendNotification({
+    waitUntil(sendNotification({
       user_id: req.user._id,
       type: "ACCOUNT_NOTIFICATION",
       title: "Support Ticket Created",
       message: `Your device problem report (${ticket.ticket_number}) has been received. Our team is investigating.`,
       data: { ticket_id: ticket._id, ticket_number: ticket.ticket_number },
-    });
+    }).catch(() => console.warn('[Notification] DISPATCH_FAILED')));
 
     // Dispatch real-time notification to Admins & Customer Care Helpers via BullMQ queue
-    await notifyNewTicket({ ticket, customer: req.user, device: deviceDoc });
+    waitUntil(notifyNewTicket({ ticket, customer: req.user, device: deviceDoc }).catch(() => console.warn('[Notification] DISPATCH_FAILED')));
 
     res.status(201).json({
       success: true,
@@ -91,7 +97,7 @@ exports.reportConnectionIssue = async (req, res, next) => {
   try {
     const { device_id, BLE_ADDRESS, description, error_code, app_version } = req.body;
 
-    if (!description) {
+    if (typeof description !== 'string' || !description.trim() || description.length > 5000 || [device_id, BLE_ADDRESS, error_code, app_version].some(value => value != null && (typeof value !== 'string' || value.length > 100))) {
       return res.status(400).json({ success: false, message: "Description of the connection issue is required" });
     }
 
@@ -113,7 +119,7 @@ exports.reportConnectionIssue = async (req, res, next) => {
     });
 
     // Dispatch notification to staff queue
-    await notifyNewTicket({ ticket, customer: req.user });
+    waitUntil(notifyNewTicket({ ticket, customer: req.user }).catch(() => console.warn("[Notification] DISPATCH_FAILED")));
 
     res.status(201).json({
       success: true,
@@ -132,9 +138,10 @@ exports.reportConnectionIssue = async (req, res, next) => {
 // ─────────────────────────────────────────────
 exports.contactSupport = async (req, res, next) => {
   try {
-    const { subject, message, priority = "medium" } = req.body;
+    const { subject, message } = req.body;
+    const priority = "medium";
 
-    if (!subject || !message) {
+    if (typeof subject !== 'string' || !subject.trim() || subject.length > 200 || typeof message !== 'string' || !message.trim() || message.length > 5000) {
       return res.status(400).json({ success: false, message: "Subject and message are required" });
     }
 
@@ -154,7 +161,7 @@ exports.contactSupport = async (req, res, next) => {
     });
 
     // Dispatch notification to staff queue
-    await notifyNewTicket({ ticket, customer: req.user });
+    waitUntil(notifyNewTicket({ ticket, customer: req.user }).catch(() => console.warn("[Notification] DISPATCH_FAILED")));
 
     res.status(201).json({
       success: true,
@@ -175,7 +182,7 @@ exports.submitFeedback = async (req, res, next) => {
   try {
     const { title, feedback, rating } = req.body;
 
-    if (!feedback) {
+    if (typeof feedback !== 'string' || !feedback.trim() || feedback.length > 5000 || (title != null && (typeof title !== 'string' || title.length > 200)) || (rating != null && (!Number.isInteger(rating) || rating < 1 || rating > 5))) {
       return res.status(400).json({ success: false, message: "Feedback content is required" });
     }
 
@@ -195,7 +202,7 @@ exports.submitFeedback = async (req, res, next) => {
     });
 
     // Dispatch notification to staff queue
-    await notifyNewTicket({ ticket, customer: req.user });
+    waitUntil(notifyNewTicket({ ticket, customer: req.user }).catch(() => console.warn("[Notification] DISPATCH_FAILED")));
 
     res.status(201).json({
       success: true,
@@ -262,9 +269,11 @@ exports.getTicketDetails = async (req, res, next) => {
 // ─────────────────────────────────────────────
 exports.addTicketMessage = async (req, res, next) => {
   try {
-    const { message, attachments } = req.body;
+    const { message } = req.body;
+    const attachments = ownedAttachments(req.body.attachments, req.user._id);
+    if (!attachments) return res.status(400).json({ success: false, message: 'Attach up to three screenshots uploaded by your account.' });
 
-    if (!message) {
+    if (typeof message !== 'string' || !message.trim() || message.length > 5000) {
       return res.status(400).json({ success: false, message: "Message is required" });
     }
 
@@ -293,11 +302,11 @@ exports.addTicketMessage = async (req, res, next) => {
     }
 
     // Notify assigned helper or support staff that customer replied
-    await notifyTicketReply({
+    waitUntil(notifyTicketReply({
       ticket,
       customer: req.user,
       messageText: message,
-    });
+    }).catch(() => console.warn('[Notification] DISPATCH_FAILED')));
 
     res.status(200).json({
       success: true,

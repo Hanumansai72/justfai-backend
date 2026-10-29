@@ -23,11 +23,14 @@ module.exports = (io, socket) => {
   // Automatically join private user room for targeted notifications/events
   socket.join(`user:${userId}`);
 
+  if (['ADMIN', 'HELPER'].includes(user.role)) socket.join('staff:presence');
+  const inTicket = id => typeof id === 'string' && socket.rooms.has(`ticket:${id}`);
+
   // Register online presence
   presenceService.setUserOnline(userId, socket.id).catch(() => {});
 
   // Broadcast presence to relevant listeners
-  io.emit("presence_update", { userId, isOnline: true });
+  io.to("staff:presence").emit("presence_update", { userId, isOnline: true });
 
   // ─────────────────────────────────────────────
   // Event: join_ticket
@@ -36,7 +39,7 @@ module.exports = (io, socket) => {
   socket.on("join_ticket", async (data, callback) => {
     try {
       const ticketId = typeof data === "string" ? data : data?.ticketId;
-      if (!ticketId) {
+      if (typeof ticketId !== 'string' || !/^[a-f0-9]{24}$/i.test(ticketId)) {
         if (typeof callback === "function") callback({ success: false, message: "ticketId is required" });
         return;
       }
@@ -73,7 +76,7 @@ module.exports = (io, socket) => {
   socket.on("leave_ticket", (data, callback) => {
     try {
       const ticketId = typeof data === "string" ? data : data?.ticketId;
-      if (ticketId) {
+      if (inTicket(ticketId)) {
         const roomName = `ticket:${ticketId}`;
         socket.leave(roomName);
         socket.to(roomName).emit("user_left_ticket", {
@@ -109,7 +112,7 @@ module.exports = (io, socket) => {
 
       const { ticketId, body, attachments, clientMsgId } = data || {};
 
-      if (!ticketId || !body) {
+      if (typeof ticketId !== 'string' || !/^[a-f0-9]{24}$/i.test(ticketId) || typeof body !== 'string' || !body.trim() || body.length > 5000) {
         if (typeof callback === "function") {
           return callback({ success: false, message: "ticketId and body are required" });
         }
@@ -158,7 +161,7 @@ module.exports = (io, socket) => {
   // ─────────────────────────────────────────────
   socket.on("typing_start", (data) => {
     const ticketId = data?.ticketId;
-    if (ticketId) {
+    if (inTicket(ticketId)) {
       socket.to(`ticket:${ticketId}`).emit("user_typing", {
         ticketId,
         user: { id: userId, name: user.name },
@@ -169,7 +172,7 @@ module.exports = (io, socket) => {
 
   socket.on("typing_stop", (data) => {
     const ticketId = data?.ticketId;
-    if (ticketId) {
+    if (inTicket(ticketId)) {
       socket.to(`ticket:${ticketId}`).emit("user_typing", {
         ticketId,
         user: { id: userId, name: user.name },
@@ -184,7 +187,10 @@ module.exports = (io, socket) => {
   socket.on("mark_as_read", async (data, callback) => {
     try {
       const ticketId = data?.ticketId;
-      if (!ticketId) return;
+      if (!inTicket(ticketId)) {
+        if (typeof callback === 'function') callback({ success: false, message: 'Join an authorized ticket before marking messages as read.' });
+        return;
+      }
 
       await chatService.markAsRead(ticketId, userId);
 
@@ -209,7 +215,7 @@ module.exports = (io, socket) => {
 
     const isFullyOffline = await presenceService.setUserOffline(userId, socket.id);
     if (isFullyOffline) {
-      io.emit("presence_update", { userId, isOnline: false, lastSeen: Date.now() });
+      io.to("staff:presence").emit("presence_update", { userId, isOnline: false, lastSeen: Date.now() });
     }
   });
 };

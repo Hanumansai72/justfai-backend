@@ -96,6 +96,13 @@ const userSchema = new mongoose.Schema(
       type: [
         {
           token: { type: String, required: true },
+          session_id: { type: String },
+          signed_in_at: { type: Date },
+          scope: { type: String, enum: ['admin'] },
+          expires_at: { type: Date },
+          ip: { type: String },
+          user_agent: { type: String },
+          location: { type: String },
           created_at: { type: Date, default: Date.now },
         },
       ],

@@ -44,7 +44,7 @@ exports.sendMessage = async (req, res, next) => {
     const { ticketId } = req.params;
     const { body, attachments, clientMsgId } = req.body;
 
-    if (!body || !body.trim()) {
+    if (typeof body !== 'string' || !body.trim() || body.length > 5000) {
       return res.status(400).json({ success: false, message: "Message body is required" });
     }
 
@@ -139,6 +139,10 @@ exports.getUnreadCount = async (req, res, next) => {
 exports.getUserPresence = async (req, res, next) => {
   try {
     const { userId } = req.params;
+    if (String(req.user._id) !== userId && !['ADMIN', 'HELPER'].includes(req.user.role)) {
+      const shared = await require('../models/SupportTicket.model').exists({ user_id: req.user._id, assigned_to: userId });
+      if (!shared) return res.status(403).json({ success: false, message: 'Presence is limited to your support participants.' });
+    }
     const status = await presenceService.getUserStatus(userId);
 
     res.status(200).json({

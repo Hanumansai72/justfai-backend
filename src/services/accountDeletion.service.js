@@ -42,6 +42,7 @@ async function retireAccount(userId, challenge) {
     await require('../models/FirmwareHistory.model').updateMany(
       { initiated_by: userId }, { $set: { initiated_by: null } }, { session });
   });
+  require('../security/session').disconnectUser(userId);
   // Model post-hooks run before transaction commit; invalidate again afterwards.
   await cache.invalidate(cacheGroups);
 }

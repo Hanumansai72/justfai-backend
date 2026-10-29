@@ -127,16 +127,12 @@ exports.uploadImage = async (req, res, next) => {
 exports.getImagePreview = async (req, res, next) => {
   try {
     const publicId = req.params.public_id || req.query.public_id;
-    const width    = parseInt(req.query.width, 10) || 240;
-    const height   = parseInt(req.query.height, 10) || 240;
-    const crop     = req.query.crop || "fill";
-    const gravity  = req.query.gravity || "auto";
-
-    if (!publicId) {
-      return res.status(400).json({
-        success: false,
-        message: "public_id parameter is required",
-      });
+    const dimension = value => Math.max(1, Math.min(1024, Number.parseInt(value, 10) || 240));
+    const width = dimension(req.query.width), height = dimension(req.query.height);
+    const crop = ['fill', 'fit', 'limit', 'scale', 'thumb', 'pad'].includes(req.query.crop) ? req.query.crop : 'fill';
+    const gravity = ['auto', 'face', 'faces', 'center'].includes(req.query.gravity) ? req.query.gravity : 'auto';
+    if (typeof publicId !== 'string' || !publicId || publicId.length > 1000) {
+      return res.status(400).json({ success: false, message: 'Valid public_id is required.' });
     }
 
     const previewUrl = cloudinaryService.getPreviewUrl(publicId, {

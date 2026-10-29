@@ -17,7 +17,7 @@ const Notification = require("../models/Notification.model");
 exports.getNotifications = async (req, res, next) => {
   try {
     const page  = Math.max(1, parseInt(req.query.page,  10) || 1);
-    const limit = Math.min(50, parseInt(req.query.limit, 10) || 20);
+    const limit = Math.max(1, Math.min(50, parseInt(req.query.limit, 10) || 20));
     const skip  = (page - 1) * limit;
 
     const filter = { user_id: req.user._id };

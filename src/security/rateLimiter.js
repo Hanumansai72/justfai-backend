@@ -10,7 +10,9 @@ function identity(req, scope) {
   const ip = ipKeyGenerator(req.ip || req.socket?.remoteAddress || 'unknown');
   if (scope === 'ip') return ip;
   if (scope === 'accountIp') {
-    const raw = req.body?.identifier || req.body?.email || req.body?.username || req.body?.employee_id;
+    const fields = req.path === '/login' && req.baseUrl === '/api/admin'
+      ? ['username', 'email', 'employee_id', 'identifier'] : ['email', 'username', 'employee_id', 'identifier'];
+    const raw = fields.map(field => req.body?.[field]).find(Boolean);
     return ip + ':' + (typeof raw === 'string' ? raw.trim().toLowerCase() : 'unknown');
   }
   if (scope === 'session') {

@@ -43,4 +43,5 @@ router.delete('/delete-account', protect, authorize('USER'), otpVerifyLimiter, d
 // ── Admin-only Routes ──────────────────────────────────────────
 router.get("/",         protect, authorize("ADMIN"), adminReadLimiter,                         getAllUsers);
 
+require('../security/sanitize').sanitizeParams(router);
 module.exports = router;

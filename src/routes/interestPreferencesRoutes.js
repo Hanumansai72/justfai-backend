@@ -23,4 +23,5 @@ router.post('/unsubscribe', publicReadLimiter, route(async (req, res) => {
   return res.type('html').send(unsubscribePage('You are unsubscribed from JustRide product updates.'));
 }));
 
+require('../security/sanitize').sanitizeParams(router);
 module.exports = router;

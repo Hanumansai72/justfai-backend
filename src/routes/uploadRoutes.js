@@ -52,8 +52,9 @@ router.get("/preview", getImagePreview);
 router.get("/preview/*splat", (req, res, next) => {
   // Capture wildcard public_id from path
   const rawPublicId = req.params.splat || req.params[0];
-  req.params.public_id = rawPublicId;
+  req.params.public_id = Array.isArray(rawPublicId) ? rawPublicId.join('/') : rawPublicId;
   getImagePreview(req, res, next);
 });
 
+require('../security/sanitize').sanitizeParams(router);
 module.exports = router;

@@ -20,6 +20,17 @@ return {1, limit - count - 1, reset}
 class RedisWindowStore {
   constructor(client, rest = false) { this.client = client; this.rest = rest; }
   async consume(key, policy) {
+    if (!this.rest && this.client.status !== 'ready') {
+      await new Promise((resolve, reject) => {
+        const finish = error => {
+          clearTimeout(timer); this.client.off('ready', ready); this.client.off('error', failed);
+          error ? reject(error) : resolve();
+        };
+        const ready = () => finish(), failed = error => finish(error);
+        const timer = setTimeout(() => finish(new Error('Rate-limit Redis unavailable')), 1500);
+        this.client.once('ready', ready); this.client.once('error', failed);
+      });
+    }
     const args = [policy.windowMs, policy.limit, randomUUID()];
     const result = this.rest
       ? await this.client.eval(SLIDING_WINDOW, [key], args)

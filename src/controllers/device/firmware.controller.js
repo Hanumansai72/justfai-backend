@@ -1,3 +1,4 @@
+const escapeRegex = require('../../utils/escapeRegex');
 /**
  * device/firmware.controller.js
  *
@@ -18,16 +19,7 @@ const { sendNotification }       = require("../notification.controller");
 const cacheService               = require("../../services/cache.service");
 const audit                      = require("../../security/auditLogger");
 
-/** Semantic version comparison — returns true if `candidate` is newer than `current` */
-const isNewerVersion = (current, candidate) => {
-  if (!current) return true;
-  const parse = (v) => String(v).replace(/^v/i, "").split(".").map(Number);
-  const [cA, cB = 0, cC = 0] = parse(current);
-  const [nA, nB = 0, nC = 0] = parse(candidate);
-  if (nA !== cA) return nA > cA;
-  if (nB !== cB) return nB > cB;
-  return nC > cC;
-};
+const isNewerVersion = require('../../utils/isNewerVersion');
 
 /** Check caller is the device owner or an admin */
 const isAuthorized = (device, req) =>
@@ -49,7 +41,7 @@ exports.getLatestFirmware = async (req, res, next) => {
       async () => {
         const filter = { is_active: true, channel };
         if (device_type) {
-          filter.$or = [{ device_type: null }, { device_type: new RegExp(device_type.trim(), "i") }];
+          filter.$or = [{ device_type: null }, { device_type: String(device_type).trim() }];
         }
         return await FirmwareRelease.findOne(filter).sort({ release_date: -1 }).lean();
       },
@@ -82,7 +74,7 @@ exports.checkUpdate = async (req, res, next) => {
     const device = await findDeviceByIdentifier(
       Device,
       req.params.id,
-      "linked_to device_id BLE_ADDRESS firmware_version device_version latest_firmware firmware_update_available"
+      "linked_to device_type device_id BLE_ADDRESS firmware_version device_version latest_firmware firmware_update_available"
     );
 
     if (!device) return res.status(404).json({ success: false, message: "Device not found" });
@@ -96,6 +88,7 @@ exports.checkUpdate = async (req, res, next) => {
     const latestCatalogRelease = await FirmwareRelease.findOne({
       is_active: true,
       channel: "stable",
+      device_type: device.device_type ? { $in: [null, device.device_type] } : null,
     })
       .sort({ release_date: -1 })
       .lean();
@@ -199,53 +192,8 @@ exports.getFirmwareDownload = async (req, res, next) => {
 // @route   POST /api/devices/firmware/release
 // @access  Private/Admin
 // ─────────────────────────────────────────────
-exports.createFirmwareRelease = async (req, res, next) => {
-  try {
-    const {
-      version, device_type, min_supported_version,
-      release_notes, file_url, checksum, channel,
-    } = req.body;
-
-    if (!version) {
-      return res.status(400).json({ success: false, message: "version is required" });
-    }
-
-    const duplicate = await FirmwareRelease.exists({ version });
-    if (duplicate) {
-      return res.status(409).json({
-        success: false,
-        message: `Firmware version '${version}' already exists`,
-      });
-    }
-
-    const release = await FirmwareRelease.create({
-      version,
-      device_type,
-      min_supported_version,
-      release_notes,
-      file_url,
-      checksum,
-      channel: channel || "stable",
-      released_by: req.user._id,
-      release_date: new Date(),
-      is_active: true,
-    });
-
-    audit.log({
-      req, category: "FIRMWARE", action: "FIRMWARE_RELEASE_CREATE", status: "SUCCESS",
-      resource_type: "Firmware", resource_id: release._id,
-      message: `Firmware release created: v${version}`,
-    });
-
-    res.status(201).json({
-      success: true,
-      message: "Firmware release published successfully",
-      data: release,
-    });
-  } catch (error) {
-    next(error);
-  }
-};
+exports.createFirmwareRelease = (req, res) => res.status(410).json({ success: false,
+  message: 'Publish firmware using the validated admin firmware upload endpoint.' });
 
 // ─────────────────────────────────────────────
 // @desc    Record firmware update result (success / failed / rollback)
@@ -345,7 +293,7 @@ exports.getFirmwareHistory = async (req, res, next) => {
     }
 
     const page  = Math.max(1, parseInt(req.query.page,  10) || 1);
-    const limit = Math.min(50, parseInt(req.query.limit, 10) || 20);
+    const limit = Math.max(1, Math.min(50, parseInt(req.query.limit, 10) || 20));
     const skip  = (page - 1) * limit;
 
     const [total, history] = await Promise.all([

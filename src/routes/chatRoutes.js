@@ -23,4 +23,5 @@ router.post("/tickets/:ticketId/read", markAsRead);
 router.get("/tickets/:ticketId/unread", getUnreadCount);
 router.get("/presence/:userId", getUserPresence);
 
+require('../security/sanitize').sanitizeParams(router);
 module.exports = router;

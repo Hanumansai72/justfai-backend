@@ -1,3 +1,4 @@
+const escapeRegex = require('../../utils/escapeRegex');
 /**
  * admin/users.controller.js
  *
@@ -30,7 +31,7 @@ exports.getUsers = async (req, res, next) => {
       filter.status = req.query.status;
     // Full-text–style name/email search using case-insensitive regex
     if (req.query.search) {
-      const rx = new RegExp(req.query.search.trim(), "i");
+      const rx = new RegExp(escapeRegex(req.query.search.trim()), 'i');
       filter.$or = [{ name: rx }, { email: rx }];
     }
 

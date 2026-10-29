@@ -9,4 +9,5 @@ router.use(protect, authorize('USER'), (req, res, next) => {
 });
 router.get('/', userReadLimiter, getRides);
 router.post('/', userWriteLimiter, saveRide);
+require('../security/sanitize').sanitizeParams(router);
 module.exports = router;

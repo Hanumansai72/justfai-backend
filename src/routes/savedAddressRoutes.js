@@ -8,10 +8,10 @@ const {
   updateAddress,
   deleteAddress,
 } = require("../controllers/savedAddressController");
-const { protect } = require("../middlewares/authMiddleware");
+const { protect, authorize } = require("../middlewares/authMiddleware");
 
 // All saved address routes require authentication
-router.use(protect, userLimiter);
+router.use(protect, authorize("USER"), userLimiter);
 
 router.route("/")
   .post(createAddress)
@@ -22,4 +22,5 @@ router.route("/:id")
   .put(updateAddress)
   .delete(deleteAddress);
 
+require('../security/sanitize').sanitizeParams(router);
 module.exports = router;

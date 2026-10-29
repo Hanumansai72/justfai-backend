@@ -30,8 +30,9 @@ exports.saveRide = async (req, res, next) => {
   const filter = { user_id: req.user._id, sessionId: parsed.data.sessionId };
   try {
     // Retries of a completed session return the original record, never a second ride.
+    const now = new Date();
     const ride = await Ride.findOneAndUpdate(filter,
-      { $setOnInsert: { ...parsed.data, user_id: req.user._id } },
+      { $setOnInsert: { ...parsed.data, user_id: req.user._id, createdAt: now, updatedAt: now } },
       { upsert: true, new: true, runValidators: true, timestamps: false }).lean();
     return res.status(200).json({ success: true, data: ride });
   } catch (error) {

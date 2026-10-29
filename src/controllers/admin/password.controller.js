@@ -66,6 +66,7 @@ exports.changePassword = async (req, res, next) => {
     }, { new: true }).select('_id');
     if (!updated) return invalid(res);
     audit.log({ req, category: 'ADMIN', action: 'ADMIN_PASSWORD_CHANGED', resource_type: 'User', resource_id: account._id, message: 'Admin password changed with email OTP; existing sessions revoked.' });
+    require('../../security/session').disconnectUser(account._id);
     clearTokenCookies(res);
     return res.json({ success: true, message: 'Password changed. Sign in again with your new password.' });
   } catch (error) { next(error); }

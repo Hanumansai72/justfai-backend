@@ -200,6 +200,8 @@ exports.pairDevice = async (req, res, next) => {
 
     let pairedDevice;
     await mongoose.connection.transaction(async session => {
+      const otherDevice = await Device.findOne({ linked_to: req.user._id, is_paired: true, _id: { $ne: device._id } }).session(session).select('_id').lean();
+      if (otherDevice) throw Object.assign(new Error('Unlink your existing device before pairing another.'), { statusCode: 409 });
       const account = await User.updateOne({ _id: req.user._id, status: 'active' },
         { $inc: { device_link_version: 1 } }, { session });
       if (!account.matchedCount) {
@@ -208,7 +210,7 @@ exports.pairDevice = async (req, res, next) => {
       pairedDevice = await Device.findOneAndUpdate(
         {
           _id:        device._id,
-          is_paired:  false,
+          $or: [{ is_paired: false }, { is_paired: true, linked_to: req.user._id }],
           is_blocked: false,
           is_retired: false,
           is_active:  true,
@@ -219,6 +221,7 @@ exports.pairDevice = async (req, res, next) => {
         },
         { new: true, session }
       );
+      if (!pairedDevice) throw Object.assign(new Error('Device pairing changed. Refresh and try again.'), { statusCode: 409 });
     });
     if (pairedDevice) await cache.invalidate(['users', 'devices', 'pairing', 'support', 'dashboard']);
 
@@ -281,7 +284,7 @@ exports.requestUnlinkOtp = async (req, res, next) => {
      * findOne({ identifier + linked_to }) hits the compound index { linked_to, is_paired }
      * and eliminates a separate ownership comparison in JS.
      */
-    const device = await findDeviceByIdentifier(Device, identifier, "linked_to unlink_otp unlink_otp_expires");
+    const device = await findDeviceByIdentifier(Device, identifier, "linked_to device_id devicename unlink_otp unlink_otp_expires");
 
     if (!device) {
       return res.status(404).json({ success: false, message: "Device not found" });
