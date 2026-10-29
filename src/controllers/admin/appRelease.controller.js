@@ -313,11 +313,18 @@ exports.updateAppRelease = async (req, res, next) => {
     // 1. Destructure updatable properties
     const { is_active, is_mandatory, release_notes, min_supported_version, channel } = req.body;
 
+    const fileFields = {};
+    if (req.body.file_url !== undefined) {
+      let valid = false; try { const url = new URL(req.body.file_url); valid = url.protocol === 'https:' && !url.username && !url.password; } catch {}
+      if (!valid || typeof req.body.checksum_sha256 !== 'string' || !/^[a-f0-9]{64}$/i.test(req.body.checksum_sha256) || !Number.isSafeInteger(req.body.file_size_bytes) || req.body.file_size_bytes <= 0) return res.status(400).json({ success: false, message: 'Replacement APK needs an HTTPS URL, SHA-256 checksum and file size.' });
+      Object.assign(fileFields, { file_url: req.body.file_url, checksum_sha256: req.body.checksum_sha256, file_size_bytes: req.body.file_size_bytes });
+    }
     // 2. Perform atomic update in MongoDB
     const release = await AppRelease.findByIdAndUpdate(
       req.params.id, // Release ID from URL path (:id)
       {
         $set: {
+          ...fileFields,
           // Conditional Spread Pattern:
           // If 'is_active' is undefined, (false && { is_active }) is false, spreading nothing.
           // If 'is_active' is provided, it adds { is_active: value } to the $set update!
@@ -339,6 +346,7 @@ exports.updateAppRelease = async (req, res, next) => {
       return res.status(404).json({ success: false, message: "App release not found" });
     }
 
+    audit.log({ req, category: 'ADMIN', action: 'APP_RELEASE_UPDATE', resource_type: 'AppRelease', resource_id: release._id, message: 'Admin updated app release details.', metadata: { binary_replaced: !!fileFields.file_url } });
     // 4. Return updated release
     res.status(200).json({
       success: true,

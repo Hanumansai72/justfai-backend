@@ -56,6 +56,6 @@ deviceSchema.index({ linked_to: 1, is_paired: 1 });
 deviceSchema.index({ createdAt: -1, _id: -1 });
 deviceSchema.index({ is_paired: 1, linked_date: -1 });
 
-deviceSchema.plugin(require('./plugins/invalidateAdminCache'), { groups: ['devices', 'pairing', 'support', 'dashboard'] });
+deviceSchema.plugin(require('./plugins/invalidateAdminCache'), { groups: ['users', 'devices', 'pairing', 'support', 'dashboard'] });
 
 module.exports = mongoose.model("Device", deviceSchema);

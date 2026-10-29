@@ -146,6 +146,14 @@ exports.updateFirmwareRelease = async (req, res, next) => {
     if (is_active           !== undefined) allowed.is_active           = is_active;
     if (min_supported_version !== undefined) allowed.min_supported_version = min_supported_version;
 
+    if (req.body.device_type !== undefined) {
+      if (req.body.device_type !== '' && !require('../../utils/deviceModels').includes(req.body.device_type)) return res.status(400).json({ success: false, message: 'Choose a valid device model.' });
+      allowed.device_type = req.body.device_type || null;
+    }
+    if (file_url !== undefined) {
+      let valid = false; try { const url = new URL(file_url); valid = url.protocol === 'https:' && !url.username && !url.password; } catch {}
+      if (!valid || typeof checksum !== 'string' || !/^[a-f0-9]{64}$/i.test(checksum)) return res.status(400).json({ success: false, message: 'Replacement firmware needs an HTTPS URL and SHA-256 checksum.' });
+    }
     // Changing `version` is intentionally disallowed — it's a natural key
 
     if (!Object.keys(allowed).length) {
@@ -298,4 +306,14 @@ exports.getLatestPublicFirmware = async (req, res, next) => {
   } catch (error) {
     next(error);
   }
+};
+
+exports.getUploadUrl = async (req, res, next) => {
+  try {
+    const { filename } = req.body;
+    if (typeof filename !== 'string' || filename.length > 200 || !/\.bin$/i.test(filename)) return res.status(400).json({ success: false, message: 'Select a .bin firmware file.' });
+    const key = `firmware/${require('node:crypto').randomUUID()}-${filename.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+    const data = await cloudflareR2.getUploadPresignedUrl(key, 'application/octet-stream');
+    res.json({ success: true, data });
+  } catch (error) { next(error); }
 };

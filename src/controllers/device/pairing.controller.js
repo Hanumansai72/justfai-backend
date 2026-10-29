@@ -84,7 +84,7 @@ exports.checkDeviceAccess = async (req, res, next) => {
       return res.status(200).json({
         success: true, can_pair: true, reason: "ALREADY_PAIRED_TO_YOU",
         message: "Device is already paired with your account.",
-        data: { _id: device._id, devicename: device.devicename, device_id: device.device_id, BLE_ADDRESS: device.BLE_ADDRESS },
+        data: { _id: device._id, reason: 'ALREADY_PAIRED_TO_YOU', devicename: device.device_type || device.devicename, device_id: device.device_id, BLE_ADDRESS: device.BLE_ADDRESS },
       });
     }
 
@@ -193,7 +193,7 @@ exports.pairDevice = async (req, res, next) => {
       unlink_by:          null,
       unlink_otp:         null,
       unlink_otp_expires: null,
-      ...(devicename && { devicename }),
+      ...(!device.devicename && devicename && { devicename }),
       ...(device_version && { device_version }),
       ...(device_id && !device.device_id && { device_id }),
     };
@@ -414,9 +414,20 @@ exports.unlinkDevice = async (req, res, next) => {
     res.status(200).json({
       success: true,
       message: "Device unlinked and credentials invalidated",
-      data: { _id: device._id, devicename: device.devicename, device_id: device.device_id, BLE_ADDRESS: device.BLE_ADDRESS },
+      data: { _id: device._id, reason: 'ALREADY_PAIRED_TO_YOU', devicename: device.device_type || device.devicename, device_id: device.device_id, BLE_ADDRESS: device.BLE_ADDRESS },
     });
   } catch (error) {
     next(error);
   }
+};
+
+// Resolve only names for actually discovered BLE addresses; never expose ownership or pairing secrets.
+exports.scanDetails = async (req, res, next) => {
+  try {
+    const values = req.body.addresses;
+    if (!Array.isArray(values) || values.length > 30 || values.some(value => typeof value !== 'string' || !/^(?:[A-F0-9]{2}:){5}[A-F0-9]{2}$/i.test(value))) return res.status(400).json({ success: false, message: 'Provide up to 30 valid BLE addresses.' });
+    const devices = await Device.find({ BLE_ADDRESS: { $in: [...new Set(values.map(formatBleAddress))] }, is_retired: { $ne: true } })
+      .select('BLE_ADDRESS devicename device_type -_id').lean();
+    res.set('Cache-Control', 'private, no-store').json({ success: true, data: devices });
+  } catch (error) { next(error); }
 };

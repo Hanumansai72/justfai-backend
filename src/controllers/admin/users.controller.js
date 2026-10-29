@@ -35,6 +35,7 @@ exports.getUsers = async (req, res, next) => {
       filter.$or = [{ name: rx }, { email: rx }];
     }
 
+    if (req.query.has_device === 'true') filter._id = { $in: await Device.distinct('linked_to', { is_paired: true, linked_to: { $ne: null } }) };
     // Parallel count + data — saves one serial round-trip
     const [total, users] = await Promise.all([
       User.countDocuments(filter),
@@ -46,11 +47,15 @@ exports.getUsers = async (req, res, next) => {
         .lean(),
     ]);
 
+    const devices = await Device.find({ linked_to: { $in: users.map(user => user._id) }, is_paired: true })
+      .select('linked_to devicename device_type device_id BLE_ADDRESS').lean();
+    const byOwner = new Map(devices.map(device => [String(device.linked_to), device]));
+    const rows = users.map(user => ({ ...user, paired_device: byOwner.get(String(user._id)) || null }));
     res.status(200).json({
       success: true,
       pagination: { total, page, limit, pages: Math.ceil(total / limit) },
       count: users.length,
-      data: users,
+      data: rows,
     });
   } catch (error) {
     next(error);
@@ -168,4 +173,31 @@ exports.deleteUser = async (req, res, next) => {
   } catch (error) {
     next(error);
   }
+};
+
+exports.updateUser = async (req, res, next) => {
+  try {
+    const { name, email, phonenumber } = req.body;
+    const allowed = {};
+    if (name !== undefined) {
+      if (typeof name !== 'string' || !name.trim() || name.length > 100) return res.status(400).json({ success: false, message: 'Enter a name up to 100 characters.' });
+      allowed.name = name.trim();
+    }
+    if (email !== undefined) {
+      if (typeof email !== 'string' || email.length > 254 || !require('validator').isEmail(email.trim())) return res.status(400).json({ success: false, message: 'Enter a valid email.' });
+      allowed.email = email.trim().toLowerCase();
+    }
+    if (phonenumber !== undefined) {
+      const phone = require('../../utils/normalizePhone')(phonenumber);
+      if (typeof phonenumber !== 'string' || !phone || !/^\+?[0-9]{7,15}$/.test(phone)) return res.status(400).json({ success: false, message: 'Enter a valid phone number.' });
+      allowed.phonenumber = phone;
+    }
+    if (!Object.keys(allowed).length) return res.status(400).json({ success: false, message: 'No editable details supplied.' });
+    const user = await User.findOneAndUpdate({ _id: req.params.id, role: 'USER', status: { $ne: 'deleted' } },
+      { $set: { ...allowed, ...((allowed.email || allowed.phonenumber) && { refresh_tokens: [] }) }, ...((allowed.email || allowed.phonenumber) && { $inc: { credential_version: 1 } }) }, { new: true, runValidators: true, select: USER_PROJECTION }).lean();
+    if (!user) return res.status(404).json({ success: false, message: 'User not found.' });
+    if (allowed.email || allowed.phonenumber) require('../../security/session').disconnectUser(user._id);
+    audit.log({ req, category: 'ADMIN', action: 'USER_DETAILS_UPDATE', resource_type: 'User', resource_id: user._id, message: 'Admin updated customer details.', metadata: { fields: Object.keys(allowed) } });
+    res.json({ success: true, message: 'User details updated.', data: user });
+  } catch (error) { next(error); }
 };

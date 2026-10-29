@@ -29,7 +29,7 @@ const {
 
 // Domain Controllers
 const { getDashboardStats, getSystemHealth }                  = require("../controllers/admin/dashboard.controller");
-const { getUsers, getUserById, updateUserStatus, deleteUser } = require("../controllers/admin/users.controller");
+const { getUsers, getUserById, updateUser, updateUserStatus, deleteUser } = require("../controllers/admin/users.controller");
 const {
   registerDevice, getDevices, getDeviceById, updateDevice,
   blockDevice, unblockDevice, forceUnlinkDevice, retireDevice,
@@ -77,6 +77,7 @@ router.delete("/helpers/:id",         authorize("ADMIN"), deleteHelperUser);
 // User Management (Admin only)
 router.get("/users",              authorize("ADMIN"), adminCache('users'), getUsers);
 router.get("/users/:id",          authorize("ADMIN"), getUserById);
+router.put('/users/:id', authorize('ADMIN'), updateUser);
 router.patch("/users/:id/status", authorize("ADMIN"), updateUserStatus);
 router.delete("/users/:id",       authorize("ADMIN"), deleteUser);
 
@@ -113,6 +114,7 @@ const {
 } = require("../controllers/admin/appRelease.controller");
 
 // Firmware Releases (Admin only - supports direct .bin upload)
+router.post('/firmware/upload-url', authorize('ADMIN'), uploadLimiter, require('../controllers/admin/firmware.controller').getUploadUrl);
 router.post("/firmware",              authorize("ADMIN"), uploadLimiter, firmwareUpload.single("firmware_file"), createFirmwareRelease);
 router.get("/firmware",               authorize("ADMIN", "HELPER"), adminCache('firmware'), getFirmwareReleases);
 router.put("/firmware/:id",           authorize("ADMIN"), updateFirmwareRelease);

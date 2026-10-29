@@ -43,6 +43,7 @@ router.get("/firmware/download/:version", getFirmwareDownload);
 router.post("/firmware/release",          authorize("ADMIN"), createFirmwareRelease);
 
 // ── Pairing domain ─────────────────────────────────────────────
+router.post('/scan-details', authorize('USER'), pairingCheckLimiter, require('../controllers/device/pairing.controller').scanDetails);
 router.post("/check-pairing",          pairingCheckLimiter, checkDeviceAccess);
 router.post("/pair",                   pairingLimiter, validate.pairDevice, pairDevice);
 router.post("/request-unlink-otp",     otpLimiter,    requestUnlinkOtp);

@@ -24,7 +24,7 @@ const DEVICE_PROJECTION = "-pairing_code -unlink_otp -device_secret -device_hash
 // ─────────────────────────────────────────────
 exports.registerDevice = async (req, res, next) => {
   try {
-    const { devicename, device_version, firmware_version, serialnumber, BLE_ADDRESS, device_id } = req.body;
+    const { device_version, firmware_version, serialnumber, BLE_ADDRESS, device_id } = req.body;
     const normalizedBle = formatBleAddress(BLE_ADDRESS);
 
     const orConditions = [];
@@ -48,8 +48,9 @@ exports.registerDevice = async (req, res, next) => {
 
     const uniqueDeviceSecret = generateRandomCode(32).toLowerCase();
 
+    if (!require('../../utils/deviceModels').includes(req.body.device_type)) return res.status(400).json({ success: false, message: 'Choose JustRide Hustle or JustRide Aventura.' });
     const device = await Device.create({
-      devicename:       devicename || "Smart Ride Device",
+      devicename:       req.body.device_type,
       device_version,
       device_type: req.body.device_type || null,
       firmware_version: firmware_version || device_version || null,
@@ -154,11 +155,12 @@ exports.getDeviceById = async (req, res, next) => {
 // ─────────────────────────────────────────────
 exports.updateDevice = async (req, res, next) => {
   try {
+    if (req.body.device_type !== undefined && !require('../../utils/deviceModels').includes(req.body.device_type)) return res.status(400).json({ success: false, message: 'Choose JustRide Hustle or JustRide Aventura.' });
     const allowed = {};
     const { devicename, device_version, serialnumber, is_active } = req.body;
     if (devicename     !== undefined) allowed.devicename     = devicename;
     if (device_version !== undefined) allowed.device_version = device_version;
-    if (req.body.device_type !== undefined) allowed.device_type = req.body.device_type;
+    if (req.body.device_type !== undefined) { allowed.device_type = req.body.device_type; allowed.devicename = req.body.device_type; }
     if (serialnumber   !== undefined) allowed.serialnumber   = serialnumber;
     if (is_active      !== undefined) allowed.is_active      = is_active;
 
@@ -173,7 +175,7 @@ exports.updateDevice = async (req, res, next) => {
     ).lean();
 
     if (!device) return res.status(404).json({ success: false, message: "Device not found" });
-
+    audit.log({ req, category: 'ADMIN', action: 'DEVICE_DETAILS_UPDATE', resource_type: 'Device', resource_id: device._id, message: 'Admin updated device details.', metadata: { fields: Object.keys(allowed) } });
     res.status(200).json({ success: true, message: "Device updated", data: device });
   } catch (error) {
     next(error);
