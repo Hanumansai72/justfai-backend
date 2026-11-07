@@ -178,7 +178,7 @@ exports.pairDevice = async (req, res, next) => {
       device.linked_to.toString() === req.user._id.toString();
     if (!alreadyOwner && !validSetupCode(req.body.setup_code, device.setup_code_hash)) {
       return res.status(403).json({ success: false,
-        message: 'A valid private device setup code is required. Contact the device administrator if it is missing.' });
+        message: 'Device verification failed. Ask your device administrator to complete display setup.' });
     }
 
     // Generate cryptographic credentials using the device's unique secret
