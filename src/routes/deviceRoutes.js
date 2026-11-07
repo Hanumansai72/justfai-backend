@@ -36,6 +36,8 @@ const {
 
 // ── All routes require authentication ──────────────────────────
 router.use(protect);
+// Temporary: setup-file generation bypasses device write/registration limits.
+router.post("/:id/setup-code", authorize("ADMIN"), issueSetupCode);
 router.use((req, res, next) => (req.method === "GET" ? deviceReadLimiter : deviceWriteLimiter)(req, res, next));
 
 // ── Firmware Catalog & Download (Placed before /:id parameter routes) ──
@@ -51,8 +53,6 @@ router.post("/request-unlink-otp",     otpLimiter,    requestUnlinkOtp);
 router.post("/:id/request-unlink-otp", otpLimiter,    requestUnlinkOtp);
 router.post("/unlink",                 unlinkLimiter,  validate.unlinkDevice, unlinkDevice);
 router.post("/:id/unlink",             unlinkLimiter,  validate.unlinkDevice, unlinkDevice);
-
-router.post("/:id/setup-code", authorize("ADMIN"), deviceRegisterLimiter, issueSetupCode);
 
 // ── My Device ──────────────────────────────────────────────────
 router.post("/heartbeat", authorize("USER"), heartbeat);
