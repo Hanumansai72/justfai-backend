@@ -8,6 +8,7 @@ const validate = require("../security/validate");
 // Controllers
 const {
   registerDevice,
+  issueSetupCode,
   getDevice,
   getMyDevice,
   heartbeat,
@@ -50,6 +51,8 @@ router.post("/request-unlink-otp",     otpLimiter,    requestUnlinkOtp);
 router.post("/:id/request-unlink-otp", otpLimiter,    requestUnlinkOtp);
 router.post("/unlink",                 unlinkLimiter,  validate.unlinkDevice, unlinkDevice);
 router.post("/:id/unlink",             unlinkLimiter,  validate.unlinkDevice, unlinkDevice);
+
+router.post("/:id/setup-code", authorize("ADMIN"), deviceRegisterLimiter, issueSetupCode);
 
 // ── My Device ──────────────────────────────────────────────────
 router.post("/heartbeat", authorize("USER"), heartbeat);

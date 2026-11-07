@@ -124,6 +124,8 @@ exports.checkDeviceAccess = async (req, res, next) => {
 // @route   POST /api/devices/pair
 // @access  Private
 // ─────────────────────────────────────────────
+const { validSetupCode } = require('../../utils/deviceCrypto');
+
 exports.pairDevice = async (req, res, next) => {
   try {
     const { BLE_ADDRESS, devicename, device_version, serialnumber, device_id } = req.body;
@@ -140,7 +142,7 @@ exports.pairDevice = async (req, res, next) => {
      * Saves one full DB round-trip compared to sequential awaits.
      */
     const [device, userCurrentDevice] = await Promise.all([
-      Device.findOne({ $or: orConditions }).select("+device_secret"),
+      Device.findOne({ $or: orConditions }).select("+device_secret +setup_code_hash"),
       Device.findOne({ linked_to: req.user._id, is_paired: true }).select("_id devicename BLE_ADDRESS device_id").lean(),
     ]);
 
@@ -170,6 +172,13 @@ exports.pairDevice = async (req, res, next) => {
         message: "You already have a paired device. Unlink it first.",
         current_paired_device: userCurrentDevice,
       });
+    }
+
+    const alreadyOwner = device.is_paired && device.linked_to &&
+      device.linked_to.toString() === req.user._id.toString();
+    if (!alreadyOwner && !validSetupCode(req.body.setup_code, device.setup_code_hash)) {
+      return res.status(403).json({ success: false,
+        message: 'A valid private device setup code is required. Contact the device administrator if it is missing.' });
     }
 
     // Generate cryptographic credentials using the device's unique secret
@@ -210,6 +219,7 @@ exports.pairDevice = async (req, res, next) => {
       pairedDevice = await Device.findOneAndUpdate(
         {
           _id:        device._id,
+          ...(!alreadyOwner && { setup_code_hash: device.setup_code_hash }),
           $or: [{ is_paired: false }, { is_paired: true, linked_to: req.user._id }],
           is_blocked: false,
           is_retired: false,

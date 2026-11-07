@@ -87,7 +87,14 @@ const findDeviceByIdentifier = (Model, identifier, selectFields = "", populate =
   return query.exec();
 };
 
+// The private provisioning code is independent of the short unlink code and
+// HMAC secret. Never accept a public MAC address as proof of possession.
+const validSetupCode = (code, storedHash) =>
+  typeof code === 'string' && /^[A-F0-9]{32}$/.test(code) &&
+  safeCompare(hashString(code), storedHash);
+
 module.exports = {
+  validSetupCode,
   formatBleAddress,
   generateRandomCode,
   generateNumericOtp,

@@ -8,7 +8,23 @@
  *   - deleteDevice checks is_paired using findOne with projection → cheaper than full doc
  */
 const Device = require("../../models/device.model");
-const { formatBleAddress, generateRandomCode, findDeviceByIdentifier } = require("../../utils/deviceCrypto");
+const { formatBleAddress, generateRandomCode, hashString, findDeviceByIdentifier } = require("../../utils/deviceCrypto");
+
+// Admin-only recovery for existing boards. Return the setup code once; never
+// expose the HMAC secret or allow rotation underneath a currently linked owner.
+exports.issueSetupCode = async (req, res, next) => {
+  try {
+    const setupCode = generateRandomCode(32);
+    const device = await Device.findOneAndUpdate(
+      { _id: req.params.id, is_paired: false, is_active: true, is_blocked: false, is_retired: false },
+      { $set: { setup_code_hash: hashString(setupCode) } },
+      { new: true }
+    ).select('_id');
+    if (!device) return res.status(409).json({ success: false, message: 'Device must be active and unlinked before issuing a setup code.' });
+    res.set('Cache-Control', 'no-store');
+    res.json({ success: true, setup_code: setupCode });
+  } catch (error) { next(error); }
+};
 
 /** Fields safe to return to the client */
 const DEVICE_PROJECTION = "-pairing_code -unlink_otp -device_hash -__v";
@@ -43,6 +59,7 @@ exports.registerDevice = async (req, res, next) => {
     }
 
     const uniqueDeviceSecret = generateRandomCode(32).toLowerCase();
+    const setupCode = generateRandomCode(32);
 
     const device = await Device.create({
       devicename:       devicename || "Smart Ride Device",
@@ -53,11 +70,16 @@ exports.registerDevice = async (req, res, next) => {
       BLE_ADDRESS:      normalizedBle,
       device_id:        device_id || `DEV-${generateRandomCode(8)}`,
       device_secret:    uniqueDeviceSecret,
+      setup_code_hash: hashString(setupCode),
       is_paired:        false,
       is_active:        true,
     });
 
-    res.status(201).json({ success: true, message: "Device registered successfully", data: device });
+    const data = device.toObject();
+    delete data.device_secret;
+    delete data.setup_code_hash;
+    res.set('Cache-Control', 'no-store');
+    res.status(201).json({ success: true, message: 'Device registered successfully', data, setup_code: setupCode });
   } catch (error) {
     next(error);
   }

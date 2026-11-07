@@ -6,6 +6,9 @@ function mapParameters(input) {
   const latitude = Number(input.latitude), longitude = Number(input.longitude);
   const zoom = Number(input.zoom ?? 16);
   const style = input.style ?? 'dark';
+  const width = Number(input.width ?? WIDTH), height = Number(input.height ?? HEIGHT);
+  if (!((width === WIDTH && height === HEIGHT) || (width === 226 && height === 177)))
+    throw new Error('Invalid map dimensions');
   if (![input.latitude, input.longitude, input.zoom ?? 16].every(value =>
       (typeof value === 'number' || typeof value === 'string') && String(value).trim() !== '') ||
       !Number.isFinite(latitude) || Math.abs(latitude) > 85 ||
@@ -14,7 +17,7 @@ function mapParameters(input) {
       !['dark', 'light', 'streets'].includes(style)) throw new Error('Invalid map parameters');
   // Routes are rendered locally only after checking their provider provenance.
   return { center: `${latitude},${longitude}`, zoom: String(zoom),
-    size: `${WIDTH}x${HEIGHT}`, scale: '1', format: 'jpg', maptype: style };
+    size: `${width}x${height}`, scale: '1', format: 'jpg', maptype: style };
 }
 
 function jpegDimensions(bytes) {
@@ -38,19 +41,18 @@ function jpegDimensions(bytes) {
 }
 
 async function reserveMapRequest(store = getStore()) {
-  const configured = Number(process.env.LOCATIONIQ_DAILY_BUDGET ?? 4500);
+  const configured = Number(process.env.GOOGLE_STATIC_MAP_DAILY_BUDGET ?? 4500);
   const budget = Number.isInteger(configured) && configured > 0 ? Math.min(configured, 5000) : 4500;
   // Shared across all callers and instances. Reserve before contacting the provider;
   // failed attempts count conservatively. A rolling day avoids timezone-reset assumptions.
   for (const [name, windowMs, limit] of [['second', 1000, 2], ['minute', 60000, 60], ['day', 86400000, budget]]) {
-    const result = await store.consume(`locationiq:account:${name}`, { windowMs, limit });
+    const result = await store.consume(`google:account:${name}`, { windowMs, limit });
     if (!result.allowed) return Math.max(1, Math.ceil(Number(result.resetMs) / 1000) || 1);
   }
   return 0;
 }
 
-async function downloadMap(parameters, key, fetcher = fetch) {
-  const url = new URL('https://maps.locationiq.com/v3/staticmap');
+async function downloadMap(parameters, key, fetcher, url) {
   url.search = new URLSearchParams({ ...parameters, key }).toString();
   const started = Date.now();
   const controller = new AbortController();
@@ -78,9 +80,16 @@ async function downloadMap(parameters, key, fetcher = fetch) {
     if (bytes.length < 4 || bytes[0] !== 255 || bytes[1] !== 216 ||
         bytes.at(-2) !== 255 || bytes.at(-1) !== 217) return { status: 502 };
     const dimensions = jpegDimensions(bytes);
-    if (dimensions?.width !== WIDTH || dimensions?.height !== HEIGHT) return { status: 502 };
+    const [width, height] = parameters.size.split('x').map(Number);
+    if (dimensions?.width !== width || dimensions?.height !== height) return { status: 502 };
     return { status: 200, bytes, elapsedMs: Date.now() - started };
   } finally { clearTimeout(timer); }
 }
 
-module.exports = { mapParameters, reserveMapRequest, downloadMap, jpegDimensions };
+async function downloadGoogleMap(parameters, key, fetcher = fetch) {
+  const { maptype, ...request } = parameters;
+  return downloadMap({ ...request, format: 'jpg-baseline', maptype: 'roadmap',
+    style: 'feature:landscape|element:geometry|color:0x17252e' }, key, fetcher,
+    new URL('https://maps.googleapis.com/maps/api/staticmap'));
+}
+module.exports = { mapParameters, reserveMapRequest, downloadGoogleMap, jpegDimensions };
