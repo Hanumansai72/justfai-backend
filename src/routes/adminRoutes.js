@@ -34,7 +34,7 @@ const {
   registerDevice, getDevices, getDeviceById, updateDevice,
   blockDevice, unblockDevice, forceUnlinkDevice, retireDevice,
 } = require("../controllers/admin/devices.controller");
-const { getPairingRequests, forceUnpairDevice, assignDevice } = require("../controllers/admin/pairing.controller");
+const { getPairingRequests, forceUnpairDevice }               = require("../controllers/admin/pairing.controller");
 const {
   getSupportTickets,
   getSupportTicket,
@@ -83,7 +83,6 @@ router.delete("/users/:id",       authorize("ADMIN"), deleteUser);
 
 // Device Management & Control
 router.post("/devices",                   authorize("ADMIN"), deviceRegisterLimiter, registerDevice);
-router.post('/devices/:id/assign', authorize('ADMIN'), assignDevice);
 router.get("/devices",                    authorize("ADMIN", "HELPER"), adminCache('devices'), getDevices);
 router.get("/devices/:id",                authorize("ADMIN", "HELPER"), getDeviceById);
 router.put("/devices/:id",                authorize("ADMIN"),           updateDevice);

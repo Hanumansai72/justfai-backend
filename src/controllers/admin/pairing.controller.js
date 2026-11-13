@@ -9,52 +9,6 @@
  */
 const Device = require("../../models/device.model");
 const audit  = require("../../security/auditLogger");
-const mongoose = require('mongoose');
-const User = require('../../models/User');
-const cache = require('../../services/cache.service');
-const { generateRandomCode, generateDeviceHash, hashString } = require('../../utils/deviceCrypto');
-
-// Admin assignment establishes ownership; no device setup credential is needed.
-exports.assignDevice = async (req, res, next) => {
-  try {
-    const userId = req.body?.user_id;
-    if (!mongoose.isObjectIdOrHexString(req.params.id) ||
-        !mongoose.isObjectIdOrHexString(userId)) {
-      return res.status(400).json({ success: false, message: 'Choose a valid device and registered user.' });
-    }
-    const conflict = message => Object.assign(new Error(message), { statusCode: 409 });
-    await mongoose.connection.transaction(async session => {
-      // Serialize all assignment/pairing attempts for this account.
-      const account = await User.updateOne({ _id: userId, role: 'USER', status: 'active' },
-        { $inc: { device_link_version: 1 } }, { session });
-      if (!account.matchedCount) throw conflict('Choose an active registered user.');
-      const other = await Device.findOne({ linked_to: userId, is_paired: true, _id: { $ne: req.params.id } })
-        .session(session).select('_id').lean();
-      if (other) throw conflict('This user already has a device. Unlink it first.');
-      const device = await Device.findById(req.params.id).session(session).select('+device_secret');
-      if (!device || !device.is_active || device.is_blocked || device.is_retired) {
-        throw conflict('Device must be active, unblocked, and not retired.');
-      }
-      if (device.is_paired && String(device.linked_to) === String(userId)) return;
-      if (device.is_paired || device.linked_to) throw conflict('Device already belongs to a user. Unlink it first.');
-      const secret = device.device_secret || process.env.DEVICE_SECRET;
-      if (!secret || !device.BLE_ADDRESS) throw conflict('Device registration is incomplete.');
-      const code = generateRandomCode(6);
-      const assigned = await Device.findOneAndUpdate({ _id: device._id, is_paired: false,
-        linked_to: null, is_active: true, is_blocked: false, is_retired: false }, {
-        $set: { linked_to: userId, linked_date: new Date(), is_paired: true,
-          device_hash: generateDeviceHash(device.BLE_ADDRESS, code, secret), pairing_code: hashString(code) },
-        $unset: { unlink_date: '', unlink_by: '', unlink_otp: '', unlink_otp_expires: '' },
-      }, { session, new: true });
-      if (!assigned) throw conflict('Device ownership changed. Refresh and try again.');
-    });
-    await cache.invalidate(['users', 'devices', 'pairing', 'support', 'dashboard']);
-    audit.log({ req, category: 'ADMIN', action: 'DEVICE_ASSIGN', status: 'SUCCESS',
-      resource_type: 'Device', resource_id: req.params.id,
-      message: 'Admin assigned device to registered user', metadata: { user_id: userId } });
-    res.json({ success: true, message: 'Device assigned successfully.' });
-  } catch (error) { next(error); }
-};
 
 // ─────────────────────────────────────────────
 // @desc    Get active pairing requests / paired devices log
