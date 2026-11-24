@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 
-const { protect, authorize } = require("../middlewares/authMiddleware");
+const { protect, authorize, requireStaffBearer } = require("../middlewares/authMiddleware");
 const { authIpLimiter, loginLimiter, registerLimiter, googleLimiter, refreshLimiter, logoutLimiter, passwordResetLimiter, resetVerifyLimiter, userReadLimiter, profileWriteLimiter, userWriteLimiter, adminReadLimiter } = require("../security/rateLimiter");
 const validate = require("../security/validate");
 const { otpSendLimiter, otpVerifyLimiter } = require('../security/rateLimiter');
@@ -41,7 +41,7 @@ router.delete('/me', protect, authorize('USER'), otpVerifyLimiter, deleteAccount
 router.delete('/delete-account', protect, authorize('USER'), otpVerifyLimiter, deleteAccount);
 
 // ── Admin-only Routes ──────────────────────────────────────────
-router.get("/",         protect, authorize("ADMIN"), adminReadLimiter,                         getAllUsers);
+router.get("/",         requireStaffBearer, protect, authorize("ADMIN"), adminReadLimiter,     getAllUsers);
 
 require('../security/sanitize').sanitizeParams(router);
 module.exports = router;

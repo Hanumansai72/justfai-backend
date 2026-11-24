@@ -13,7 +13,30 @@ const User   = require("../../models/User");
 const Device = require("../../models/device.model");
 const audit  = require("../../security/auditLogger");
 
-const USER_PROJECTION = "name email phonenumber role status status_reason avatar auth_provider createdAt updatedAt";
+const USER_PROJECTION = "name email phonenumber role status status_reason avatar auth_provider premium_until createdAt updatedAt";
+
+exports.updateUserSubscription = async (req, res) => {
+  const Api = require('../../utils/apiResponse');
+  const { isObjectIdOrHexString } = require('mongoose');
+  const days = req.body?.days;
+  if (!isObjectIdOrHexString(req.params.id) || !Number.isInteger(days) || days < 0 || days > 365) {
+    return Api.badRequest(res, 'Provide a valid user and days from 0 to 365.');
+  }
+  const premiumUntil = days === 0 ? null : new Date(Date.now() + days * 86400000);
+  const user = await User.findOneAndUpdate(
+    { _id: req.params.id, role: 'USER', status: { $ne: 'deleted' } },
+    { $set: { premium_until: premiumUntil } },
+    { new: true, select: 'premium_until' },
+  ).lean();
+  if (!user) return Api.error(res, 'User not found.', 404);
+  audit.log({
+    req, category: 'ADMIN', action: 'USER_SUBSCRIPTION_UPDATE', status: 'SUCCESS',
+    resource_type: 'User', resource_id: user._id,
+    message: days === 0 ? 'Premium access revoked' : 'Premium access granted',
+    metadata: { days, premiumUntil },
+  });
+  return Api.success(res, { premiumUntil });
+};
 
 // ─────────────────────────────────────────────
 // @desc    List users with filters + pagination

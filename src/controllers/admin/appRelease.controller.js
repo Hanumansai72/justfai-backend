@@ -29,6 +29,7 @@ const { waitUntil } = require('@vercel/functions');
 
 // Model representing the 'appreleases' collection in MongoDB
 const AppRelease      = require("../../models/AppRelease.model");
+const cacheService    = require("../../services/cache.service");
 
 // Security audit logger: keeps an immutable history of who did what and when
 const audit           = require("../../security/auditLogger");
@@ -468,44 +469,48 @@ exports.selectFeaturedRelease = async (req, res, next) => {
  */
 exports.getLatestAppUpdate = async (req, res, next) => {
   try {
-    // 1. Extract query parameters sent by the mobile app
-    const { platform = "android", channel, current_build } = req.query;
+    const { platform = 'android', channel, current_build } = req.query;
+    const releaseChannel = channel || 'stable';
+    const filter = { platform, is_active: true, channel: releaseChannel };
+    const load = async () => {
+      // An optional latest release must not hide an older mandatory update.
+      const [latest, mandatory] = await Promise.all([
+        AppRelease.findOne(filter).sort({ build_number: -1 }).select(
+          'version build_number platform channel is_featured release_notes file_url file_size_bytes checksum_sha256 release_date'
+        ).lean(),
+        AppRelease.findOne({ ...filter, is_mandatory: true })
+          .sort({ build_number: -1 }).select('build_number -_id').lean(),
+      ]);
+      return { latest, mandatoryBuild: mandatory?.build_number ?? null };
+    };
 
-    // Published updates follow increasing build numbers. Older featured releases
-    // must not hide a newer mandatory update.
-    const filter = { platform, is_active: true, channel: channel || 'stable' };
-    const latest = await AppRelease.findOne(filter).sort({ build_number: -1 }).lean();
-    const currentB = Number(current_build) || 0;
-    const requiredUpdate = await AppRelease.exists({
-      ...filter, is_mandatory: true, build_number: { $gt: currentB },
-    });
+    // Cache catalog data only. Installed builds do not create separate Redis keys.
+    const validCacheKey = ['android', 'ios'].includes(platform) &&
+      ['stable', 'beta', 'alpha'].includes(releaseChannel);
+    const { latest, mandatoryBuild } = validCacheKey
+      ? await cacheService.getOrSet('releases',
+        JSON.stringify(['latest-public-v1', platform, releaseChannel]), load)
+      : await load();
 
-    // 4. Handle edge case: No active releases exist in the database
     if (!latest) {
       return res.status(200).json({
         success: true,
         update_available: false,
-        message: "No active release found",
+        message: 'No active release found',
       });
     }
 
-    // 5. Core Comparison Logic: Compare server build number with installed phone build number
-
-    // Example: If server has build 15 and phone has build 12 -> 15 > 12 -> true
-    const updateAvailable = latest.build_number > currentB;
-
-    // 6. Return Public DTO (Data Transfer Object)
-    //    We explicitly pick safe public fields and exclude sensitive server fields
-    res.status(200).json({
+    const currentBuild = Number(current_build) || 0;
+    return res.status(200).json({
       success: true,
-      update_available: updateAvailable,
+      update_available: latest.build_number > currentBuild,
       data: {
         id: latest._id,
         version: latest.version,
         build_number: latest.build_number,
         platform: latest.platform,
         channel: latest.channel,
-        is_mandatory: Boolean(requiredUpdate),
+        is_mandatory: mandatoryBuild !== null && mandatoryBuild > currentBuild,
         is_featured: !!latest.is_featured,
         release_notes: latest.release_notes,
         download_url: latest.file_url,

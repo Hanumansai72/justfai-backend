@@ -16,7 +16,7 @@ const FirmwareHistory = require("../../models/FirmwareHistory.model");
 const FirmwareRelease = require("../../models/FirmwareRelease.model");
 const { findDeviceByIdentifier } = require("../../utils/deviceCrypto");
 const { sendNotification }       = require("../notification.controller");
-const cacheService               = require("../../services/cache.service");
+const { latestFirmware }        = require("../../services/firmwareCatalog.service");
 const audit                      = require("../../security/auditLogger");
 
 const isNewerVersion = require('../../utils/isNewerVersion');
@@ -33,20 +33,11 @@ const isAuthorized = (device, req) =>
 exports.getLatestFirmware = async (req, res, next) => {
   try {
     const { device_type, channel = "stable" } = req.query;
-    const cacheKey = `firmware:latest:${device_type || "all"}:${channel}`;
-
-    const latestRelease = await cacheService.getOrSet(
-      'firmware',
-      cacheKey,
-      async () => {
-        const filter = { is_active: true, channel };
-        if (device_type) {
-          filter.$or = [{ device_type: null }, { device_type: String(device_type).trim() }];
-        }
-        return await FirmwareRelease.findOne(filter).sort({ release_date: -1 }).lean();
-      },
-      600 // 10 minutes cache TTL
-    );
+    const latestRelease = await latestFirmware({
+      channel,
+      deviceType: device_type ? String(device_type).trim() : undefined,
+      genericOnly: Boolean(device_type),
+    });
 
     if (!latestRelease) {
       return res.status(404).json({
@@ -85,13 +76,10 @@ exports.checkUpdate = async (req, res, next) => {
     const current = device.firmware_version || device.device_version;
 
     // Cross-reference with official active release catalog
-    const latestCatalogRelease = await FirmwareRelease.findOne({
-      is_active: true,
-      channel: "stable",
-      device_type: device.device_type ? { $in: [null, device.device_type] } : null,
-    })
-      .sort({ release_date: -1 })
-      .lean();
+    const latestCatalogRelease = await latestFirmware({
+      deviceType: device.device_type || undefined,
+      genericOnly: true,
+    });
 
     const targetVersion = latestCatalogRelease?.version || device.latest_firmware;
     const hasUpdate = !!targetVersion && isNewerVersion(current, targetVersion);

@@ -12,6 +12,7 @@ const { waitUntil } = require('@vercel/functions');
  */
 const FirmwareRelease  = require("../../models/FirmwareRelease.model");
 const Device           = require("../../models/device.model");
+const { latestPublicFirmware } = require("../../services/firmwareCatalog.service");
 const audit            = require("../../security/auditLogger");
 const cloudflareR2     = require("../../services/cloudflareR2.service");
 const releaseNotifier  = require("../../services/releaseNotification.service");
@@ -272,37 +273,8 @@ exports.selectFeaturedFirmware = async (req, res, next) => {
 // ─────────────────────────────────────────────
 exports.getLatestPublicFirmware = async (req, res, next) => {
   try {
-    // 1. Check if admin explicitly marked one as featured
-    let latest = await FirmwareRelease.findOne({ is_featured: true, is_active: true }).lean();
-
-    // 2. Fall back to newest stable
-    if (!latest) {
-      latest = await FirmwareRelease.findOne({ is_active: true, channel: "stable" })
-        .sort({ release_date: -1 })
-        .lean();
-    }
-
-    if (!latest) {
-      return res.status(200).json({
-        success: true,
-        data: null,
-      });
-    }
-
-    res.status(200).json({
-      success: true,
-      data: {
-        id: latest._id,
-        version: latest.version,
-        channel: latest.channel,
-        device_type: latest.device_type,
-        release_notes: latest.release_notes,
-        file_url: latest.file_url,
-        checksum: latest.checksum,
-        is_featured: !!latest.is_featured,
-        release_date: latest.release_date,
-      },
-    });
+    const { data } = await latestPublicFirmware();
+    return res.status(200).json({ success: true, data });
   } catch (error) {
     next(error);
   }

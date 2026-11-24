@@ -1,8 +1,8 @@
 const express = require("express");
 const router = express.Router();
 
-const { protect, authorize } = require("../middlewares/authMiddleware");
-const { pairingLimiter, pairingCheckLimiter, otpLimiter, unlinkLimiter, firmwareLimiter, deviceReadLimiter, deviceWriteLimiter, deviceRegisterLimiter } = require("../security/rateLimiter");
+const { protect, authorize, requireStaffBearer } = require("../middlewares/authMiddleware");
+const { pairingLimiter, pairingCheckLimiter, otpLimiter, unlinkLimiter, firmwareLimiter, deviceReadLimiter, deviceWriteLimiter, deviceRegisterLimiter, adminWriteLimiter } = require("../security/rateLimiter");
 const validate = require("../security/validate");
 
 // Controllers
@@ -36,8 +36,9 @@ const {
 
 // ── All routes require authentication ──────────────────────────
 router.use(protect);
-// Temporary: setup-file generation bypasses device write/registration limits.
-router.post("/:id/setup-code", authorize("ADMIN"), issueSetupCode);
+router.use((req, res, next) => ['ADMIN', 'HELPER'].includes(req.user.role)
+  ? requireStaffBearer(req, res, next) : next());
+router.post("/:id/setup-code", authorize("ADMIN"), adminWriteLimiter, issueSetupCode);
 router.use((req, res, next) => (req.method === "GET" ? deviceReadLimiter : deviceWriteLimiter)(req, res, next));
 
 // ── Firmware Catalog & Download (Placed before /:id parameter routes) ──

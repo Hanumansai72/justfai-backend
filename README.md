@@ -180,6 +180,20 @@ npm start
 
 ---
 
+## Group Ride and Premium access
+
+Group Ride is available from Ride tools. Premium riders can create a private
+group or join with an invite code. A group holds up to 12 riders and expires
+after eight hours. Each rider opts in to foreground location sharing. The API
+keeps only the latest point per rider and stops showing it after 45 seconds.
+
+An administrator can grant access with
+`PATCH /api/admin/users/:id/subscription` and JSON `{"days": 30}`.
+Send the active admin access token as `Authorization: Bearer <token>`.
+This sets the expiry to 30 days from the grant. Use `{"days": 0}` to revoke
+access. The app reads current access on the Subscription page. There is no
+checkout or payment setup.
+
 ## Customer ride history
 
 - `POST /api/rides` saves an ended navigation summary; `GET /api/rides?page=1&limit=10` returns only the authenticated customer's rides, sorted by `endTime` and ID descending. `limit=1` supplies the home screen's latest ride. The maximum page size is 10.

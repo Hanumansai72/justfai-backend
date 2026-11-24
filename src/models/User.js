@@ -74,6 +74,13 @@ const userSchema = new mongoose.Schema(
       default: null,
     },
     deleted_at: { type: Date },
+    premium_until: { type: Date },
+    communityNotifications: {
+      rideInvitations: { type: Boolean, default: true },
+      rideRequests: { type: Boolean, default: true },
+      assistanceNearby: { type: Boolean, default: true },
+      assistanceOffers: { type: Boolean, default: true },
+    },
     device_link_version: { type: Number, default: 0, select: false },
     deletion_otp_hash: { type: String, select: false },
     deletion_otp_nonce: { type: String, select: false },

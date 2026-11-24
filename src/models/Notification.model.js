@@ -47,6 +47,12 @@ const notificationSchema = new mongoose.Schema(
         "DEVICE_PAIRING",
         "SECURITY_ALERT",
         "ACCOUNT_NOTIFICATION",
+          "ASSISTANCE_REQUEST",
+          "ASSISTANCE_OFFER",
+          "ASSISTANCE_ACCEPTED",
+          "RIDE_INVITATION",
+          "RIDE_JOIN_REQUEST",
+          "RIDE_JOIN_ACCEPTED",
         // Staff & Admin notification types
         "NEW_SUPPORT_TICKET",
         "TICKET_ASSIGNED",

@@ -10,7 +10,7 @@ const express = require("express");
 const router  = express.Router();
 const adminCache = require('../middlewares/adminCache');
 
-const { protect, authorize } = require("../middlewares/authMiddleware");
+const { protect, authorize, requireStaffBearer } = require("../middlewares/authMiddleware");
 const { authIpLimiter, loginLimiter, staffLimiter, uploadLimiter, deviceRegisterLimiter, otpSendLimiter, otpVerifyLimiter } = require("../security/rateLimiter");
 
 // Auth & Staff Controllers
@@ -29,7 +29,7 @@ const {
 
 // Domain Controllers
 const { getDashboardStats, getSystemHealth }                  = require("../controllers/admin/dashboard.controller");
-const { getUsers, getUserById, updateUser, updateUserStatus, deleteUser } = require("../controllers/admin/users.controller");
+const { getUsers, getUserById, updateUser, updateUserStatus, updateUserSubscription, deleteUser } = require("../controllers/admin/users.controller");
 const {
   registerDevice, getDevices, getDeviceById, updateDevice,
   blockDevice, unblockDevice, forceUnlinkDevice, retireDevice,
@@ -44,10 +44,15 @@ const {
 } = require("../controllers/admin/support.controller");
 
 // ── Public Admin Login Route ────────────────────────────────────
+router.use((req, res, next) => {
+  res.set('Cache-Control', 'private, no-store');
+  next();
+});
 router.post("/login", authIpLimiter, loginLimiter, adminLogin);
 
 // ── Protected Staff Routes (ADMIN & HELPER) ─────────────────────
-router.use(protect, staffLimiter);
+router.use(requireStaffBearer, protect, authorize('ADMIN', 'HELPER'), staffLimiter);
+router.use('/community', authorize('ADMIN'), require('./communityRoutes').moderation);
 router.post('/logout', authorize('ADMIN', 'HELPER'), adminLogout);
 router.post('/activity', authorize('ADMIN', 'HELPER'), recordAdminActivity);
 
@@ -79,6 +84,7 @@ router.get("/users",              authorize("ADMIN"), adminCache('users'), getUs
 router.get("/users/:id",          authorize("ADMIN"), getUserById);
 router.put('/users/:id', authorize('ADMIN'), updateUser);
 router.patch("/users/:id/status", authorize("ADMIN"), updateUserStatus);
+router.patch("/users/:id/subscription", authorize("ADMIN"), updateUserSubscription);
 router.delete("/users/:id",       authorize("ADMIN"), deleteUser);
 
 // Device Management & Control

@@ -2,7 +2,7 @@ const express = require('express');
 const validator = require('validator');
 const EarlyInterest = require('../models/EarlyInterest.model');
 const ApiResponse = require('../utils/apiResponse');
-const { protect, authorize } = require('../middlewares/authMiddleware');
+const { protect, authorize, requireStaffBearer } = require('../middlewares/authMiddleware');
 const { interestLimiter, adminReadLimiter } = require('../security/rateLimiter');
 const { scheduleInterestEmails } = require('../queues/interestEmail.queue');
 
@@ -45,7 +45,7 @@ router.post('/', interestLimiter, async (req, res, next) => {
   }
 });
 
-router.get('/', protect, authorize('ADMIN', 'HELPER'), adminReadLimiter,
+router.get('/', requireStaffBearer, protect, authorize('ADMIN', 'HELPER'), adminReadLimiter,
   (req, res, next) => { scheduleInterestEmails(res); next(); }, adminCache('interest'), async (req, res, next) => {
   try {
     const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);

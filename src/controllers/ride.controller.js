@@ -47,6 +47,28 @@ exports.saveRide = async (req, res, next) => {
   }
 };
 
+const summaryInput = z.object({
+  pendingSessionIds: z.array(z.string().min(1).max(100).regex(/^[a-zA-Z0-9_-]+$/)).max(100),
+}).strict();
+
+exports.getRideSummary = async (req, res, next) => {
+  const parsed = summaryInput.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ success: false, message: 'Invalid ride summary request' });
+  }
+  const excluded = [...new Set(parsed.data.pendingSessionIds)];
+  // Exclude pending local rides even if an upload has already reached MongoDB.
+  const filter = { user_id: req.user._id, distanceMeters: { $gte: 0 } };
+  if (excluded.length) filter.sessionId = { $nin: excluded };
+  try {
+    const [summary] = await Ride.aggregate([
+      { $match: filter },
+      { $group: { _id: null, distanceMeters: { $sum: '$distanceMeters' } } },
+    ]);
+    return res.json({ success: true, data: { distanceMeters: summary?.distanceMeters ?? 0 } });
+  } catch (error) { return next(error); }
+};
+
 exports.getRides = async (req, res, next) => {
   try {
     const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);

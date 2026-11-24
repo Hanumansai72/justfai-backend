@@ -33,6 +33,12 @@ const connectDB = async () => {
       await require('./verifyAdmin')();
       await require('./auditRetention')();
       await require('./releaseIndexes')();
+      await require('../models/GroupRide').init();
+      await Promise.all(Object.values(require('../models/Community')).map(model => model.init()));
+      await Promise.all(Object.values(require('../models/Assistance')).map(model => model.init()));
+      await require('../models/CommunityRide').init();
+      await require('../models/CommunityFlag').init();
+      await require('../models/CommunityBlock').init();
       cachedConnection = conn;
       console.log("MongoDB Connected Successfully");
       console.log(`Host: ${conn.connection.host}`);

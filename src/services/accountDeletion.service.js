@@ -26,7 +26,7 @@ async function retireAccount(userId, challenge) {
       $unset: { password: '', google_id: '', username: '', avatar: '',
         password_reset_token: '', password_reset_expires: '', deletion_otp_hash: '',
         deletion_otp_nonce: '', deletion_otp_expires: '', deletion_otp_sent_at: '',
-        deletion_otp_attempts: '', deletion_otp_ready: '' },
+        deletion_otp_attempts: '', deletion_otp_ready: '', premium_until: '' },
     }, { new: true, session });
     if (!retired) throw deletionError('Account changed. Request another deletion code.', 'DELETE_NOT_ALLOWED', 400);
     if (await Device.exists({ linked_to: userId }).session(session)) {
@@ -39,6 +39,36 @@ async function retireAccount(userId, challenge) {
       { user_id: userId }, { recipient_id: userId, recipient_model: 'User' },
     ] }, { session });
     await require('../models/PushInstallation.model').deleteMany({ user_id: userId }, { session });
+    const GroupRide = require('../models/GroupRide');
+    await GroupRide.deleteMany({ owner: userId }, { session });
+    await GroupRide.updateMany({ 'members.userId': userId },
+      { $pull: { members: { userId } } }, { session });
+    const { AssistPresence, AssistanceRequest } = require('../models/Assistance');
+    await AssistPresence.deleteOne({ user: userId }, { session });
+    const assistRequests = await AssistanceRequest.find({ $or: [
+      { requester: userId }, { acceptedHelper: userId }, { 'offers.helper': userId },
+    ] }).distinct('_id').session(session);
+    await AssistanceRequest.deleteMany({ _id: { $in: assistRequests } }, { session });
+    const CommunityRide = require('../models/CommunityRide');
+    await CommunityRide.deleteMany({ host: userId }, { session });
+    await CommunityRide.updateMany({ $or: [{ participants: userId }, { 'requests.rider': userId }] },
+      { $pull: { participants: userId, requests: { rider: userId } } }, { session });
+    await require('../models/CommunityFlag').deleteMany({ $or: [
+      { reporter: userId }, { subject: userId },
+    ] }, { session });
+    await require('../models/CommunityBlock').deleteMany({ $or: [
+      { blocker: userId }, { blocked: userId },
+    ] }, { session });
+    const { Experience, Bookmark, Helpful, Report } = require('../models/Community');
+    const posts = await Experience.find({ author: userId }).distinct('_id').session(session);
+    const votes = await Helpful.find({ user: userId }).distinct('experience').session(session);
+    await Experience.updateMany({ _id: { $in: votes }, helpfulCount: { $gt: 0 } },
+      { $inc: { helpfulCount: -1 } }, { session });
+    await Experience.deleteMany({ author: userId }, { session });
+    for (const model of [Bookmark, Helpful]) {
+      await model.deleteMany({ $or: [{ user: userId }, { experience: { $in: posts } }] }, { session });
+    }
+    await Report.deleteMany({ $or: [{ reporter: userId }, { experience: { $in: posts } }] }, { session });
     await require('../models/FirmwareHistory.model').updateMany(
       { initiated_by: userId }, { $set: { initiated_by: null } }, { session });
   });

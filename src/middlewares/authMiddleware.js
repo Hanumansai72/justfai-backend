@@ -1,3 +1,12 @@
+// Privileged APIs require an explicit credential. Browsers attach cookies
+// automatically, including on some requests initiated by other sites.
+exports.requireStaffBearer = (req, res, next) => {
+  res.set('Cache-Control', 'private, no-store');
+  if (!/^Bearer [^\s]+$/i.test(req.headers.authorization || '')) {
+    return res.status(401).json({ success: false, message: 'Staff Bearer token required.' });
+  }
+  next();
+};
 
 // Protect routes - verify JWT token
 exports.protect = async (req, res, next) => {

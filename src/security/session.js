@@ -13,7 +13,7 @@ async function authenticateAccessToken(token) {
     throw error;
   }
   if (!decoded?.id) throw fail('Not authorized, token failed');
-  const fields = 'name email username avatar role status status_reason employee_id +credential_version';
+  const fields = 'name email username avatar role status status_reason employee_id premium_until +credential_version';
   let user = await User.findById(decoded.id).select(fields).lean();
   if (!user) user = await Helper.findById(decoded.id).select(fields).lean();
   if (!user) throw fail('Account not found');
