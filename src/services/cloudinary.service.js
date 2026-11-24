@@ -28,6 +28,7 @@ class CloudinaryService {
       folder = process.env.CLOUDINARY_FOLDER || "justride_uploads",
       width = 240,
       height = 240,
+      crop = "fill",
       gravity = "auto", // "auto" uses AI subject detection; "face" centers on person
     } = options;
 
@@ -41,7 +42,7 @@ class CloudinaryService {
             {
               width,
               height,
-              crop: "fill",         // Fills exact 240x240 dimensions
+              crop,                 // Fill for avatars; limit preserves ride photo aspect ratio
               gravity,             // AI-driven smart focal point centering
               quality: "auto:best", // Maximum quality with intelligent compression
               fetch_format: "auto", // Serves next-gen WebP/AVIF to supported clients

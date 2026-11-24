@@ -9,6 +9,7 @@ const experience = new Schema({
   motorcycle: String, story: String, roadNotes: String, season: String,
   distanceKm: Number, durationMinutes: Number, travelledOn: String,
   hotel: String, hotelCost: Number, hotelParking: String,
+  images: { type: [String], default: [], validate: value => value.length <= 4 },
   expenses: [{ _id: false, category: String, amount: Number }],
   helpfulCount: { type: Number, default: 0 },
 }, { timestamps: true });

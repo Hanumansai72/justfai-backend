@@ -7,6 +7,7 @@ const upload      = require("../middlewares/upload.middleware");
 const {
   uploadAvatar,
   uploadImage,
+  uploadCommunityImage,
   getImagePreview,
   deleteImage,
 } = require("../controllers/upload.controller");
@@ -42,6 +43,13 @@ router.post(
   uploadLimiter,
   upload.single("image"),
   uploadImage
+);
+
+router.post(
+  "/community-image",
+  uploadLimiter,
+  upload.single("image"),
+  uploadCommunityImage
 );
 
 // Delete custom display / generic image from cloud

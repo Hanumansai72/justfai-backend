@@ -13,6 +13,8 @@ const CommunityRide = require('../models/CommunityRide');
 const { AssistanceRequest } = require('../models/Assistance');
 const { blockedRiderIds } = require('../services/communitySafety.service');
 const escapeRegex = require('../utils/escapeRegex');
+const cloudinary = require('../config/cloudinary');
+const cloudinaryService = require('../services/cloudinary.service');
 
 const router = Router();
 const moderation = Router();
@@ -31,6 +33,7 @@ const input = z.object({
   durationMinutes: z.number().int().min(0).max(525600).optional(),
   hotel: text(160).optional(), hotelCost: amount.optional(),
   hotelParking: text(350).optional(),
+  images: z.array(z.string().max(1000).url()).max(4).optional(),
   expenses: z.array(z.object({ category: z.enum(categories), amount }).strict()).max(20).optional(),
   publish: z.boolean(),
   sourceSessionId: text(100).optional(),
@@ -42,6 +45,26 @@ const published = (id) => ({ _id: id, ...publicState });
 const pageOf = (req) => Math.max(1, Math.min(1000, parseInt(req.query.page, 10) || 1));
 const limit = 12;
 const missing = res => Api.error(res, 'Ride experience unavailable.', 404);
+function ownedCommunityImage(url, userId) {
+  try {
+    const parsed = new URL(url);
+    const uploadPrefix = `/${cloudinary.config().cloud_name}/image/upload/`;
+    if (parsed.protocol !== 'https:' || parsed.hostname !== 'res.cloudinary.com' ||
+        !parsed.pathname.startsWith(uploadPrefix)) return false;
+    const publicId = parsed.pathname.slice(uploadPrefix.length).replace(/^v\d+\//, '');
+    return publicId.startsWith(`justride/users/${userId}/community/`) &&
+      /^[a-zA-Z0-9_/-]+$/.test(publicId);
+  } catch (_) { return false; }
+}
+function communityImagePublicId(url, userId) {
+  if (!ownedCommunityImage(url, userId)) return null;
+  try {
+    const parsed = new URL(url);
+    const uploadPrefix = `/${cloudinary.config().cloud_name}/image/upload/`;
+    if (!parsed.pathname.startsWith(uploadPrefix)) return null;
+    return parsed.pathname.slice(uploadPrefix.length).replace(/^v\d+\//, '');
+  } catch (_) { return null; }
+}
 const safe = (req, res, next) => { res.set('Cache-Control', 'private, no-store'); next(); };
 const validateId = (req, res, next, id) =>
   isObjectIdOrHexString(id) ? next() : Api.badRequest(res, 'Invalid record ID.');
@@ -80,7 +103,7 @@ async function feed(req, res, filter, sort, projection) {
     nextPage: rows.length > limit ? page + 1 : null });
 }
 const cardFields = 'author sourceRide state title origin destination region motorcycle ' +
-  'distanceKm durationMinutes expenses helpfulCount publishedAt';
+  'story distanceKm durationMinutes expenses helpfulCount images publishedAt';
 
 router.get('/experiences', async (req, res) => {
   const q = typeof req.query.q === 'string' ? req.query.q.trim().slice(0, 120) : '';
@@ -136,6 +159,9 @@ router.get('/experiences/:id', async (req, res) => {
 async function saveExperience(req, res, editing) {
   const parsed = input.safeParse(req.body);
   if (!parsed.success) return Api.badRequest(res, 'Check the experience details and complete the required fields.');
+  if ((parsed.data.images || []).some(url => !ownedCommunityImage(url, req.user._id))) {
+    return Api.badRequest(res, 'Ride photos must be uploaded with this rider account.');
+  }
   const { sourceSessionId, publish, ...fields } = parsed.data;
   const current = editing ? await Experience.findOne(own(req)).lean() : null;
   if (editing && !current) return missing(res);
@@ -150,11 +176,21 @@ async function saveExperience(req, res, editing) {
   const row = editing ? await Experience.findOneAndUpdate(own(req), { $set: values, $unset: unset },
     { new: true }).lean() : (await Experience.create({ ...values, author: req.user._id })).toObject();
   if (!row) return missing(res);
+  if (editing && current?.images?.length) {
+    const retained = new Set(fields.images || current.images);
+    await Promise.allSettled(current.images.filter(url => !retained.has(url)).map(url => {
+      const publicId = communityImagePublicId(url, req.user._id);
+      return publicId ? cloudinaryService.deleteImage(publicId) : Promise.resolve();
+    }));
+  }
   return Api.success(res, (await present([row], req.user._id))[0], 'Experience saved', editing ? 200 : 201);
 }
 router.post('/experiences', (req, res) => saveExperience(req, res, false));
 router.patch('/experiences/:id', (req, res) => saveExperience(req, res, true));
 router.delete('/experiences/:id', async (req, res) => {
+  const current = await Experience.findOne({ _id: req.params.id, author: req.user._id })
+    .select('images').lean();
+  if (!current) return missing(res);
   await connection.transaction(async session => {
     const removed = await Experience.deleteOne({ _id: req.params.id, author: req.user._id }, { session });
     if (!removed.deletedCount) return;
@@ -162,6 +198,10 @@ router.delete('/experiences/:id', async (req, res) => {
       await model.deleteMany({ experience: req.params.id }, { session });
     }
   });
+  await Promise.allSettled((current.images || []).map(url => {
+    const publicId = communityImagePublicId(url, req.user._id);
+    return publicId ? cloudinaryService.deleteImage(publicId) : Promise.resolve();
+  }));
   return Api.success(res);
 });
 

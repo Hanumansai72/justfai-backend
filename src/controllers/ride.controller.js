@@ -58,7 +58,7 @@ exports.getRideSummary = async (req, res, next) => {
   }
   const excluded = [...new Set(parsed.data.pendingSessionIds)];
   // Exclude pending local rides even if an upload has already reached MongoDB.
-  const filter = { user_id: req.user._id, distanceMeters: { $gte: 0 } };
+  const filter = { user_id: req.user._id, distanceMeters: { $gte: 250 }, durationSeconds: { $gte: 30 } };
   if (excluded.length) filter.sessionId = { $nin: excluded };
   try {
     const [summary] = await Ride.aggregate([
@@ -73,7 +73,7 @@ exports.getRides = async (req, res, next) => {
   try {
     const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
     const limit = Math.max(1, Math.min(10, Number.parseInt(req.query.limit, 10) || 10));
-    const filter = { user_id: req.user._id };
+    const filter = { user_id: req.user._id, distanceMeters: { $gte: 250 }, durationSeconds: { $gte: 30 } };
     const [items, total] = await Promise.all([
       Ride.find(filter).sort({ endTime: -1, _id: -1 }).skip((page - 1) * limit).limit(limit).lean(),
       Ride.countDocuments(filter),

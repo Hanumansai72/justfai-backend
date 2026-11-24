@@ -119,6 +119,29 @@ exports.uploadImage = async (req, res, next) => {
   }
 };
 
+// @desc Upload a rider-owned Community experience photo without cropping its aspect ratio.
+// @route POST /api/upload/community-image
+exports.uploadCommunityImage = async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'Please choose an image.' });
+    }
+    const result = await cloudinaryService.uploadImage(req.file.buffer, {
+      folder: `justride/users/${req.user._id}/community`,
+      width: 1600,
+      height: 1200,
+      crop: 'limit',
+      gravity: 'auto',
+    });
+    return res.status(200).json({
+      success: true,
+      data: { secure_url: result.secure_url, public_id: result.public_id },
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
 // ─────────────────────────────────────────────
 // @desc    Get dynamic preview URL for an existing Cloudinary image
 // @route   GET /api/upload/preview/:public_id
