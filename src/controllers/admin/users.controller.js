@@ -19,8 +19,8 @@ exports.updateUserSubscription = async (req, res) => {
   const Api = require('../../utils/apiResponse');
   const { isObjectIdOrHexString } = require('mongoose');
   const days = req.body?.days;
-  if (!isObjectIdOrHexString(req.params.id) || !Number.isInteger(days) || days < 0 || days > 365) {
-    return Api.badRequest(res, 'Provide a valid user and days from 0 to 365.');
+  if (!isObjectIdOrHexString(req.params.id) || !Number.isInteger(days) || days < 0 || days > 1095) {
+    return Api.badRequest(res, 'Provide a valid user and days from 0 to 1095.');
   }
   const premiumUntil = days === 0 ? null : new Date(Date.now() + days * 86400000);
   const user = await User.findOneAndUpdate(
@@ -32,7 +32,7 @@ exports.updateUserSubscription = async (req, res) => {
   audit.log({
     req, category: 'ADMIN', action: 'USER_SUBSCRIPTION_UPDATE', status: 'SUCCESS',
     resource_type: 'User', resource_id: user._id,
-    message: days === 0 ? 'Premium access revoked' : 'Premium access granted',
+    message: days === 0 ? 'Premium access revoked' : `Premium access granted for ${days} days`,
     metadata: { days, premiumUntil },
   });
   return Api.success(res, { premiumUntil });
